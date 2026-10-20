@@ -14,6 +14,8 @@ type Config struct {
 	DBHost     string
 	DBPort     string
 	DBName     string
+	DBTLS      bool
+	DBDSN      string
 	RedisAddr  string
 	RedisPass  string
 	JWTSecret  string
@@ -62,6 +64,8 @@ func LoadConfig() *Config {
 		DBHost:     getEnv("DB_HOST", "127.0.0.1"),
 		DBPort:     getEnv("DB_PORT", "3306"),
 		DBName:     getEnv("DB_NAME", "splito_db"),
+		DBTLS:      getEnv("DB_TLS", "false") == "true",
+		DBDSN:      getEnv("DATABASE_URL", getEnv("DB_DSN", "")),
 		RedisAddr:  getEnv("REDIS_ADDR", "127.0.0.1:6379"),
 		RedisPass:  getEnv("REDIS_PASSWORD", ""),
 		JWTSecret:  getEnv("JWT_SECRET", "super-secret-splito-jwt-key"),

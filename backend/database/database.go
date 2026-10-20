@@ -17,8 +17,17 @@ var (
 )
 
 func InitDB(cfg *config.Config) (*sql.DB, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&loc=Local",
-		cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName)
+	var dsn string
+	if cfg.DBDSN != "" {
+		dsn = cfg.DBDSN
+	} else {
+		tlsParam := ""
+		if cfg.DBTLS {
+			tlsParam = "&tls=true"
+		}
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&loc=Local%s",
+			cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName, tlsParam)
+	}
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {

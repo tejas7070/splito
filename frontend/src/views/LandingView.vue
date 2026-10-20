@@ -152,7 +152,7 @@ const handleLogin = () => {
               </div>
               <div class="pass-expedition-title brand-font">Goa Monsoon Roadtrip 2026</div>
               <div class="pass-status-pill">
-                <i class="pi pi-users text-xs"></i> 4 Members &nbsp;•&nbsp; 👑 Munimji: Tejas
+                <i class="pi pi-users text-xs"></i> 4 Members &nbsp;•&nbsp; <i class="pi pi-shield text-xs"></i> Munimji: Tejas
               </div>
             </div>
 
@@ -260,19 +260,44 @@ const handleLogin = () => {
       </section>
     </main>
 
-    <!-- Footer -->
+    <!-- Modern Neumorphic Footer -->
     <footer class="landing-footer">
-      <div class="footer-inner">
-        <div class="footer-brand">
-          <div class="brand-icon-box small">
-            <img :src="appFavicon" alt="Splito Logo" class="brand-logo" />
+      <div class="footer-container">
+        <!-- Main Footer Tier -->
+        <div class="footer-main-row">
+          <div class="footer-brand-wrap">
+            <div class="brand-cluster" @click="router.push('/')">
+              <div class="brand-icon-box">
+                <img :src="appFavicon" alt="Splito Logo" class="brand-logo" />
+              </div>
+              <span class="brand-title brand-font">Splito</span>
+            </div>
+            <p class="footer-tagline">
+              Automated Group Treasury &amp; Expense Settlement Protocol
+            </p>
           </div>
-          <span class="brand-font font-bold">Splito</span>
-          <span class="text-muted text-xs">© 2026. Made with ❤️ for hassle-free group journeys.</span>
+
+          <div class="footer-actions">
+            <button @click="handleLogin" class="footer-pill-btn">
+              <span>Sign In</span>
+            </button>
+            <button @click="handleGetStarted" class="footer-pill-btn accent">
+              <span>Get Started</span>
+              <i class="pi pi-arrow-right text-xs"></i>
+            </button>
+          </div>
         </div>
-        <div class="footer-links">
-          <button @click="handleLogin" class="footer-link">Log In</button>
-          <button @click="handleGetStarted" class="footer-link">Register</button>
+
+        <div class="footer-divider-line"></div>
+
+        <!-- Meta / Copyright Tier -->
+        <div class="footer-bottom-row">
+          <span class="footer-copyright">
+            &copy; 2026 Splito. All rights reserved.
+          </span>
+          <span class="footer-sub-note">
+            Built for transparent &amp; drama-free group expeditions.
+          </span>
         </div>
       </div>
     </footer>
@@ -777,49 +802,119 @@ const handleLogin = () => {
   padding: 12px 28px !important;
 }
 
-/* Footer */
+/* Modern Unified Footer */
 .landing-footer {
   border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-  padding: 24px 0;
+  padding: 40px 0 28px 0;
   background: var(--surface);
+  font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: background-color 0.25s ease;
 }
 
-.footer-inner {
+.footer-container {
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
   padding: 0 24px;
   display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.footer-main-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 20px;
 }
 
-.footer-brand {
+.footer-brand-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-tagline {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  font-weight: 500;
+  max-width: 480px;
+}
+
+.footer-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
-.footer-links {
+.footer-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  background: var(--surface);
+  color: var(--text-main);
+  box-shadow: var(--shadow-flat-sm);
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.06));
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.footer-pill-btn:hover {
+  transform: translateY(-1px);
+  color: var(--accent);
+}
+
+.footer-pill-btn:active {
+  box-shadow: var(--shadow-inset);
+  transform: translateY(1px);
+}
+
+.footer-pill-btn.accent {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 3px 12px rgba(6, 182, 212, 0.35);
+}
+
+.footer-pill-btn.accent:hover {
+  filter: brightness(1.08);
+  color: #ffffff;
+}
+
+.footer-divider-line {
+  height: 1px;
+  width: 100%;
+  background: var(--border-subtle, rgba(0, 0, 0, 0.08));
+  opacity: 0.7;
+}
+
+.footer-bottom-row {
   display: flex;
   align-items: center;
-  gap: 18px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.footer-link {
-  background: none;
-  border: none;
+.footer-copyright {
   font-size: 13px;
   color: var(--text-muted);
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.15s ease;
+  font-weight: 500;
 }
 
-.footer-link:hover {
-  color: var(--accent);
+.footer-sub-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+  opacity: 0.85;
 }
 
 /* Responsive queries */
@@ -861,10 +956,16 @@ const handleLogin = () => {
     display: none;
   }
 
-  .footer-inner {
+  .footer-main-row {
     flex-direction: column;
-    text-align: center;
-    gap: 12px;
+    align-items: flex-start;
+    gap: 18px;
+  }
+
+  .footer-bottom-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 }
 </style>
