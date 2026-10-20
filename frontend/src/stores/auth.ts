@@ -9,8 +9,11 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = () => !!user.value;
 
-  const setAuth = (_accessToken: string, userData: User) => {
+  const setAuth = (accessToken: string, userData: User) => {
     user.value = userData;
+    if (accessToken) {
+      localStorage.setItem('auth_token', accessToken);
+    }
     // Clean up any old residual localStorage items
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -82,6 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
   const logout = async () => {
     user.value = null;
     isAuthChecked.value = true;
+    localStorage.removeItem('auth_token');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     try {
