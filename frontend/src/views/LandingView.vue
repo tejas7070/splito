@@ -152,7 +152,7 @@ const handleLogin = () => {
               </div>
               <div class="pass-expedition-title brand-font">Goa Monsoon Roadtrip 2026</div>
               <div class="pass-status-pill">
-                <i class="pi pi-users text-xs"></i> 4 Members &nbsp;•&nbsp; 👑 Munimji: Tejas
+                <i class="pi pi-users text-xs"></i> 4 Members &nbsp;•&nbsp; <i class="pi pi-shield text-xs"></i> Munimji: Tejas
               </div>
             </div>
 
@@ -268,7 +268,11 @@ const handleLogin = () => {
             <img :src="appFavicon" alt="Splito Logo" class="brand-logo" />
           </div>
           <span class="brand-font font-bold">Splito</span>
-          <span class="text-muted text-xs">© 2026. Made with ❤️ for hassle-free group journeys.</span>
+          <span class="footer-sep">|</span>
+          <span class="text-muted text-xs">Automated Group Treasury &amp; Expense Settlement Protocol</span>
+        </div>
+        <div class="footer-meta">
+          <span class="text-muted text-xs">&copy; 2026 Splito. All rights reserved.</span>
         </div>
         <div class="footer-links">
           <button @click="handleLogin" class="footer-link">Log In</button>
@@ -800,6 +804,18 @@ const handleLogin = () => {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.footer-sep {
+  color: var(--text-muted);
+  opacity: 0.35;
+  font-size: 13px;
+}
+
+.footer-meta {
+  display: flex;
+  align-items: center;
 }
 
 .footer-links {
