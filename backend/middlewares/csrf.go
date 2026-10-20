@@ -56,7 +56,7 @@ func CSRFProtectionMiddleware(cfg *config.Config) gin.HandlerFunc {
 				return
 			}
 			originOnly := strings.ToLower(parsed.Scheme + "://" + parsed.Host)
-			if !allowedMap[originOnly] {
+			if !allowedMap["*"] && !allowedMap[originOnly] {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 					"error": "Forbidden: untrusted origin: " + originOnly,
 				})
@@ -85,7 +85,7 @@ func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {
 			parsed, err := url.Parse(origin)
 			if err == nil {
 				originOnly := strings.ToLower(parsed.Scheme + "://" + parsed.Host)
-				if allowedMap[originOnly] {
+				if allowedMap["*"] || allowedMap[originOnly] {
 					c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 				}
 			}
