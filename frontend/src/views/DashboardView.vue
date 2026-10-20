@@ -219,6 +219,32 @@ const loadSettlement = async (tripId: number) => {
 const showDeleteTripModal = ref(false);
 const deletingTrip = ref(false);
 
+// Receipt Lightbox Viewer State
+const showReceiptModal = ref(false);
+const activeReceipt = ref<{ title: string; claimant?: string; amount?: number; url: string; isPdf: boolean } | null>(null);
+
+const getFullReceiptUrl = (path?: string) => {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const apiBase = import.meta.env.VITE_API_URL || '';
+  return `${apiBase}${path.startsWith('/') ? '' : '/'}${path}`;
+};
+
+const openReceiptViewer = (claim: any) => {
+  const rawPath = claim.receipt_path || claim.receipt_url;
+  if (!rawPath) return;
+  const fullUrl = getFullReceiptUrl(rawPath);
+  const isPdf = rawPath.toLowerCase().endsWith('.pdf') || rawPath.toLowerCase().includes('.pdf');
+  activeReceipt.value = {
+    title: claim.title || 'Expense Claim Receipt',
+    claimant: claim.claimant_name,
+    amount: claim.amount_paise,
+    url: fullUrl,
+    isPdf,
+  };
+  showReceiptModal.value = true;
+};
+
 const statusOptions = [
   { label: 'Planned', value: 'planned', icon: 'pi pi-calendar' },
   { label: 'Active', value: 'active', icon: 'pi pi-send' },
@@ -2345,14 +2371,15 @@ onMounted(async () => {
                 <div class="claim-meta-details">
                   <span class="category-badge">{{ claim.category }}</span>
                   <span class="claim-date">{{ new Date(claim.expense_date).toLocaleDateString() }}</span>
-                  <a 
+                  <button 
                     v-if="claim.receipt_path || claim.receipt_url" 
-                    :href="claim.receipt_path || claim.receipt_url" 
-                    target="_blank" 
+                    @click.stop="openReceiptViewer(claim)" 
                     class="receipt-view-link mono-num"
+                    type="button"
+                    title="View Attached Receipt"
                   >
-                    📎 View Receipt
-                  </a>
+                    <i class="pi pi-receipt text-xs"></i> View Receipt
+                  </button>
                 </div>
               </div>
 
@@ -3440,6 +3467,59 @@ onMounted(async () => {
             icon="pi pi-trash" 
             severity="danger" 
           />
+        </div>
+      </div>
+    </Dialog>
+
+    <!-- 11. Receipt Lightbox Preview Dialog -->
+    <Dialog 
+      v-model:visible="showReceiptModal" 
+      modal 
+      :header="activeReceipt?.title || 'Receipt Attachment'" 
+      :style="{ width: '92vw', maxWidth: '38rem' }"
+      :closable="true"
+    >
+      <div v-if="activeReceipt" class="receipt-modal-body">
+        <div class="receipt-meta-banner">
+          <div v-if="activeReceipt.claimant" class="receipt-claimant">
+            <span class="text-xs text-muted">Claimant: </span>
+            <strong class="font-bold brand-font text-sm">{{ activeReceipt.claimant }}</strong>
+          </div>
+          <div v-if="activeReceipt.amount" class="receipt-amount mono-num font-bold">
+            {{ formatINR(activeReceipt.amount) }}
+          </div>
+        </div>
+
+        <div class="receipt-content-box">
+          <iframe 
+            v-if="activeReceipt.isPdf" 
+            :src="activeReceipt.url" 
+            class="receipt-pdf-frame"
+          ></iframe>
+          <img 
+            v-else 
+            :src="activeReceipt.url" 
+            :alt="activeReceipt.title" 
+            class="receipt-image-preview" 
+          />
+        </div>
+
+        <div class="dialog-actions-row pt-3">
+          <Button 
+            type="button" 
+            label="Close" 
+            severity="secondary" 
+            text 
+            @click="showReceiptModal = false" 
+          />
+          <a 
+            :href="activeReceipt.url" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            class="receipt-external-btn"
+          >
+            <i class="pi pi-external-link mr-1"></i> Open Original File
+          </a>
         </div>
       </div>
     </Dialog>
@@ -6476,14 +6556,87 @@ html.dark .neu-table td {
   font-weight: 700;
   color: var(--accent);
   text-decoration: none;
-  background: rgba(37, 99, 235, 0.08);
-  padding: 2px 8px;
+  background: var(--accent-bg, rgba(6, 182, 212, 0.12));
+  border: 1px solid var(--accent-border, rgba(6, 182, 212, 0.25));
+  padding: 3px 10px;
   border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
   transition: all 0.2s ease;
 }
 
 .receipt-view-link:hover {
-  background: rgba(37, 99, 235, 0.18);
+  background: var(--accent);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.receipt-view-link:active {
+  transform: translateY(1px);
+}
+
+.receipt-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.receipt-meta-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-inset);
+}
+
+.receipt-content-box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px dashed var(--border-subtle, rgba(0, 0, 0, 0.12));
+  border-radius: 12px;
+  overflow: hidden;
+  max-height: 65vh;
+  padding: 12px;
+}
+
+.receipt-image-preview {
+  max-width: 100%;
+  max-height: 58vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: var(--shadow-flat-sm);
+}
+
+.receipt-pdf-frame {
+  width: 100%;
+  height: 58vh;
+  border: none;
+  border-radius: 8px;
+}
+
+.receipt-external-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #ffffff !important;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
+  transition: all 0.2s ease;
+}
+
+.receipt-external-btn:hover {
+  filter: brightness(1.08);
 }
 
 .rejection-note {
