@@ -1,0 +1,32 @@
+# Environment variables and local secrets
+.env
+*.env
+backend/.env
+frontend/.env
+*.local
+
+# Binaries and build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+dist/
+build/
+backend/server.exe
+backend/demo_server.exe
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+vendor/
+
+# Uploads & local data
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Temporary and log files
+*.log
+scratch/
+.system_generated/
+*.pdf

@@ -1,0 +1,153 @@
+/* Neumorphic Strict 2-Tone System (No Circus Colors) */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Instrument+Sans:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap');
+
+:root {
+  /* LIGHT: Crisp architectural warm grey */
+  --bg: #eceff2;
+  --surface: #eceff2;
+  --text-main: #191c20;
+  --text-muted: #5e6673;
+  --accent: #06b6d4; /* Vibrant Cyan Blue */
+  --accent-muted: #cffafe;
+
+  /* Neumorphic Shadows - Light */
+  --shadow-flat: 8px 8px 18px #cbcfd4, -8px -8px 18px #ffffff;
+  --shadow-flat-sm: 4px 4px 10px #cbcfd4, -4px -4px 10px #ffffff;
+  --shadow-flat-lg: 14px 14px 28px #c5c9cf, -14px -14px 28px #ffffff;
+  --shadow-inset: inset 3px 3px 7px #cbcfd4, inset -3px -3px 7px #ffffff;
+  --shadow-inset-focus: inset 3px 3px 7px #b5bac0, inset -3px -3px 7px #ffffff;
+  --active-pill: #dfe4ea;
+}
+
+html.dark {
+  /* DARK: Deep graphite charcoal */
+  --bg: #141619;
+  --surface: #141619;
+  --text-main: #f0f2f5;
+  --text-muted: #7d8592;
+  --accent: #22d3ee;
+  --accent-muted: #164e63;
+
+  /* Neumorphic Shadows - Dark */
+  --shadow-flat: 7px 7px 16px #0b0c0e, -7px -7px 16px #1d2024;
+  --shadow-flat-sm: 4px 4px 10px #0b0c0e, -4px -4px 10px #1d2024;
+  --shadow-flat-lg: 12px 12px 26px #090a0b, -12px -12px 26px #1f2227;
+  --shadow-inset: inset 3px 3px 7px #0b0c0e, inset -3px -3px 7px #1d2024;
+  --shadow-inset-focus: inset 3px 3px 7px #08090a, inset -3px -3px 7px #212429;
+  --active-pill: #1c1f24;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg);
+  color: var(--text-main);
+  font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: background-color 0.25s ease, color 0.25s ease;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, .brand-font {
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.mono-num {
+  font-family: 'Geist Mono', monospace;
+  letter-spacing: -0.03em;
+}
+
+/* Global Toast Notifications Stack */
+.toast-stack {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 99999;
+  pointer-events: none;
+}
+
+.neu-toast {
+  pointer-events: auto;
+  cursor: pointer;
+  background: var(--surface);
+  box-shadow: var(--shadow-flat-lg);
+  border-radius: 12px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 280px;
+  max-width: 440px;
+  font-size: 13px;
+  font-weight: 500;
+  border-left: 4px solid var(--accent);
+  animation: toastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.neu-toast:hover {
+  transform: translateY(-2px);
+}
+
+.neu-toast.success {
+  border-left-color: #10b981;
+}
+
+.neu-toast.error {
+  border-left-color: #ef4444;
+}
+
+.neu-toast.info {
+  border-left-color: #3b82f6;
+}
+
+.neu-toast.warn {
+  border-left-color: #f59e0b;
+}
+
+.toast-icon {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.neu-toast.success .toast-icon {
+  color: #10b981;
+}
+
+.neu-toast.error .toast-icon {
+  color: #ef4444;
+}
+
+.neu-toast.info .toast-icon {
+  color: #3b82f6;
+}
+
+.neu-toast.warn .toast-icon {
+  color: #f59e0b;
+}
+
+.toast-text {
+  flex: 1;
+  color: var(--text-main);
+  line-height: 1.4;
+}
+
+@keyframes toastSlideIn {
+  from {
+    transform: translateX(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
