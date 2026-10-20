@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"os"
+
 	"github.com/gin-gonic/gin"
 	"tripledger/config"
 	"tripledger/handlers"
@@ -96,5 +98,11 @@ func RegisterRoutes(
 	}
 
 	// Serve uploaded receipts statically
-	r.Static("/uploads", "./uploads")
+	uploadDir := "./uploads"
+	if _, err := os.Stat(uploadDir); os.IsNotExist(err) {
+		if _, err := os.Stat("backend/uploads"); err == nil {
+			uploadDir = "backend/uploads"
+		}
+	}
+	r.Static("/uploads", uploadDir)
 }
