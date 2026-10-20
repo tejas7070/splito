@@ -18,6 +18,17 @@ func NewAuthHandler(as *services.AuthService) *AuthHandler {
 	return &AuthHandler{authService: as}
 }
 
+// setAuthCookie configures the session cookie dynamically (SameSite=None for HTTPS cross-site, Lax for local dev)
+func (h *AuthHandler) setAuthCookie(c *gin.Context, token string, maxAge int) {
+	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	if secure {
+		c.SetSameSite(http.SameSiteNoneMode)
+	} else {
+		c.SetSameSite(http.SameSiteLaxMode)
+	}
+	c.SetCookie("auth_token", token, maxAge, "/", "", secure, true)
+}
+
 // RequestRegisterOTP dispatches OTP to verify email for new user registration
 func (h *AuthHandler) RequestRegisterOTP(c *gin.Context) {
 	var req types.RegisterOTPRequest
@@ -48,10 +59,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Set HttpOnly cookie with SameSite=Lax and short MaxAge (8 hours = 28800s)
-	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("auth_token", resp.AccessToken, 28800, "/", "", secure, true)
+	// Set HttpOnly cookie (SameSite=None when HTTPS for cross-domain Vercel frontend)
+	h.setAuthCookie(c, resp.AccessToken, 28800)
 	c.JSON(http.StatusCreated, resp)
 }
 
@@ -93,10 +102,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	h.authService.ResetLoginFailure("login:email:" + cleanEmail)
 	h.authService.ResetLoginFailure("login:ip:" + clientIP)
 
-	// Set HttpOnly cookie with SameSite=Lax and short MaxAge (8 hours = 28800s)
-	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("auth_token", resp.AccessToken, 28800, "/", "", secure, true)
+	// Set HttpOnly cookie (SameSite=None when HTTPS for cross-domain Vercel frontend)
+	h.setAuthCookie(c, resp.AccessToken, 28800)
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -114,10 +121,8 @@ func (h *AuthHandler) GoogleAuth(c *gin.Context) {
 		return
 	}
 
-	// Set HttpOnly cookie with SameSite=Lax and short MaxAge (8 hours = 28800s)
-	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("auth_token", resp.AccessToken, 28800, "/", "", secure, true)
+	// Set HttpOnly cookie (SameSite=None when HTTPS for cross-domain Vercel frontend)
+	h.setAuthCookie(c, resp.AccessToken, 28800)
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -202,8 +207,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 // Logout clears the auth cookie
 func (h *AuthHandler) Logout(c *gin.Context) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("auth_token", "", -1, "/", "", false, true)
+	h.setAuthCookie(c, "", -1)
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
 
