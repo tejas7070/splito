@@ -9,21 +9,19 @@ import (
 
 func TestCalculateDashboardSummary(t *testing.T) {
 	contributions := []models.Contribution{
-		{AmountPaise: 1000000, Status: "recorded"}, // ₹10,000
-		{AmountPaise: 500000, Status: "recorded"},  // ₹5,000
-		{AmountPaise: 200000, Status: "reversed"},  // Should be ignored
+		{Amount: 10000.0, AmountPaise: 1000000}, // ₹10,000
+		{Amount: 5000.0, AmountPaise: 500000},   // ₹5,000
 	}
 
 	expenses := []models.Expense{
-		{AmountPaise: 300000, PaymentSource: "group_fund", Status: "recorded"}, // ₹3,000 group spend
-		{AmountPaise: 150000, PaymentSource: "group_fund", Status: "recorded"}, // ₹1,500 group spend
-		{AmountPaise: 50000, PaymentSource: "group_fund", Status: "reversed"},  // Should be ignored
+		{Amount: 3000.0, AmountPaise: 300000, PaidFrom: "group_funds"}, // ₹3,000 group spend
+		{Amount: 1500.0, AmountPaise: 150000, PaidFrom: "group_funds"}, // ₹1,500 group spend
 	}
 
 	claims := []models.ExpenseClaim{
-		{AmountPaise: 100000, Status: models.ClaimStatusApproved}, // ₹1,000 approved out-of-pocket
-		{AmountPaise: 50000, Status: models.ClaimStatusPending},   // ₹500 pending
-		{AmountPaise: 20000, Status: models.ClaimStatusRejected},  // Ignored
+		{Amount: 1000.0, AmountPaise: 100000, Status: models.ClaimStatusApproved}, // ₹1,000 approved out-of-pocket
+		{Amount: 500.0, AmountPaise: 50000, Status: models.ClaimStatusPending},    // ₹500 pending
+		{Amount: 200.0, AmountPaise: 20000, Status: models.ClaimStatusRejected},   // Ignored
 	}
 
 	summary := BLs.CalculateDashboardSummary(contributions, expenses, claims)

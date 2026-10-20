@@ -14,33 +14,37 @@ func TestValidateClaimDecision(t *testing.T) {
 	peerID := int64(3)
 
 	// Test 1: Self-approval forbidden
-	err := BLs.ValidateClaimDecision(peerID, peerID, models.RolePeer, false)
+	claim1 := &models.ExpenseClaim{ClaimantID: peerID, Status: models.ClaimStatusPending}
+	err := BLs.ValidateClaimDecision(claim1, peerID, models.RoleParticipant)
 	if err != BLs.ErrSelfApproval {
 		t.Errorf("expected ErrSelfApproval, got %v", err)
 	}
 
 	// Test 2: Munimji self-approval forbidden
-	err = BLs.ValidateClaimDecision(munimjiID, munimjiID, models.RoleMunimji, true)
+	claim2 := &models.ExpenseClaim{ClaimantID: munimjiID, Status: models.ClaimStatusPending}
+	err = BLs.ValidateClaimDecision(claim2, munimjiID, models.RoleMunimji)
 	if err != BLs.ErrSelfApproval {
 		t.Errorf("expected ErrSelfApproval for munimji self claim, got %v", err)
 	}
 
 	// Test 3: Peer claim approved by Munimji (valid)
-	err = BLs.ValidateClaimDecision(peerID, munimjiID, models.RoleMunimji, false)
+	claim3 := &models.ExpenseClaim{ClaimantID: peerID, Status: models.ClaimStatusPending}
+	err = BLs.ValidateClaimDecision(claim3, munimjiID, models.RoleMunimji)
 	if err != nil {
 		t.Errorf("expected valid approval by munimji, got %v", err)
 	}
 
-	// Test 4: Munimji claim must be reviewed by Co-Reviewer
-	err = BLs.ValidateClaimDecision(munimjiID, coReviewerID, models.RoleCoReviewer, true)
+	// Test 4: Munimji claim reviewed by Co-Reviewer (valid)
+	claim4 := &models.ExpenseClaim{ClaimantID: munimjiID, Status: models.ClaimStatusPending}
+	err = BLs.ValidateClaimDecision(claim4, coReviewerID, models.RoleCoReviewer)
 	if err != nil {
 		t.Errorf("expected co-reviewer to be able to approve Munimji claim, got %v", err)
 	}
 
 	// Test 5: Munimji claim reviewed by ordinary peer (forbidden)
-	err = BLs.ValidateClaimDecision(munimjiID, peerID, models.RolePeer, true)
-	if err == nil {
-		t.Errorf("expected error when ordinary peer tries to review Munimji claim")
+	err = BLs.ValidateClaimDecision(claim4, peerID, models.RoleParticipant)
+	if err != BLs.ErrUnauthorizedMunim {
+		t.Errorf("expected ErrUnauthorizedMunim when ordinary peer tries to review, got %v", err)
 	}
 }
 
