@@ -51,6 +51,9 @@ func InitDB(cfg *config.Config) (*sql.DB, error) {
 }
 
 func ensureSchemaMigrations(db *sql.DB) {
+	// Support 'archived' status in trips table
+	_, _ = db.Exec(`ALTER TABLE trips MODIFY COLUMN status ENUM('planned', 'active', 'completed', 'cancelled', 'archived') NOT NULL DEFAULT 'planned';`)
+
 	// Add client_uuid column to expenses if not exists
 	_, _ = db.Exec(`ALTER TABLE expenses ADD COLUMN client_uuid VARCHAR(64) NULL;`)
 	_, _ = db.Exec(`CREATE UNIQUE INDEX idx_expenses_client_uuid ON expenses (client_uuid);`)
