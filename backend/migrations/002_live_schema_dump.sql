@@ -176,7 +176,11 @@ CREATE TABLE `trips` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(150) NOT NULL,
   `start_location` varchar(255) NOT NULL,
+  `start_latitude` decimal(10,7) DEFAULT NULL,
+  `start_longitude` decimal(10,7) DEFAULT NULL,
   `destination` varchar(255) NOT NULL,
+  `destination_latitude` decimal(10,7) DEFAULT NULL,
+  `destination_longitude` decimal(10,7) DEFAULT NULL,
   `start_date` date NOT NULL,
   `end_date` date NOT NULL,
   `estimated_budget` decimal(12,2) NOT NULL DEFAULT '0.00',
@@ -189,6 +193,20 @@ CREATE TABLE `trips` (
   CONSTRAINT `fk_trips_creator` FOREIGN KEY (`created_by`) REFERENCES `user_details` (`id`),
   CONSTRAINT `chk_trip_dates` CHECK ((`end_date` >= `start_date`))
 ) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Table structure for trip_stops
+CREATE TABLE `trip_stops` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `trip_id` bigint unsigned NOT NULL,
+  `position` int NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `latitude` decimal(10,7) NOT NULL,
+  `longitude` decimal(10,7) NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_trip_stop_position` (`trip_id`,`position`),
+  CONSTRAINT `fk_trip_stops_trip` FOREIGN KEY (`trip_id`) REFERENCES `trips` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Table structure for user_details
 CREATE TABLE `user_details` (
@@ -204,4 +222,3 @@ CREATE TABLE `user_details` (
 ) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;
-

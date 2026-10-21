@@ -19,15 +19,17 @@ func NewTripLoader(db *sql.DB) *TripLoader {
 
 func (l *TripLoader) GetByID(ctx context.Context, id int64) (*models.Trip, error) {
 	query := `
-		SELECT id, name, start_location, destination, start_date, end_date,
-		       estimated_budget, created_by, status, created_at, updated_at
+		SELECT id, name, start_location, start_latitude, start_longitude,
+		       destination, destination_latitude, destination_longitude,
+		       start_date, end_date, estimated_budget, created_by, status, created_at, updated_at
 		FROM trips WHERE id = ?
 	`
 	row := l.db.QueryRowContext(ctx, query, id)
 
 	trip := &models.Trip{}
 	err := row.Scan(
-		&trip.ID, &trip.Name, &trip.StartLocation, &trip.Destination,
+		&trip.ID, &trip.Name, &trip.StartLocation, &trip.StartLatitude, &trip.StartLongitude,
+		&trip.Destination, &trip.DestLatitude, &trip.DestLongitude,
 		&trip.StartDate, &trip.EndDate, &trip.EstimatedBudget,
 		&trip.CreatedBy, &trip.Status, &trip.CreatedAt, &trip.UpdatedAt,
 	)
@@ -41,7 +43,38 @@ func (l *TripLoader) GetByID(ctx context.Context, id int64) (*models.Trip, error
 	trip.StartPoint = trip.StartLocation
 	trip.StartAt = trip.StartDate
 	trip.EndAt = trip.EndDate
+	stops, err := l.ListTripStops(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	trip.Stops = stops
 	return trip, nil
+}
+
+func (l *TripLoader) ListTripStops(ctx context.Context, tripID int64) ([]models.TripStop, error) {
+	rows, err := l.db.QueryContext(ctx, `
+		SELECT id, trip_id, position, name, latitude, longitude
+		FROM trip_stops
+		WHERE trip_id = ?
+		ORDER BY position ASC
+	`, tripID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list trip stops: %w", err)
+	}
+	defer rows.Close()
+
+	stops := make([]models.TripStop, 0)
+	for rows.Next() {
+		var stop models.TripStop
+		if err := rows.Scan(&stop.ID, &stop.TripID, &stop.Position, &stop.Name, &stop.Latitude, &stop.Longitude); err != nil {
+			return nil, fmt.Errorf("failed to scan trip stop: %w", err)
+		}
+		stops = append(stops, stop)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read trip stops: %w", err)
+	}
+	return stops, nil
 }
 
 func (l *TripLoader) ListUserTrips(ctx context.Context, userID int64, email string) ([]models.Trip, error) {
@@ -216,4 +249,3 @@ func (l *TripLoader) ListUserPendingInvitations(ctx context.Context, email strin
 	}
 	return invitations, nil
 }
-

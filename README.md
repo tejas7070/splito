@@ -4,7 +4,7 @@
   <p><strong>Effortless group trip expenses & zero-drama peer debt settlement powered by Go & Vue.</strong></p>
 
   <p>
-    <img src="https://img.shields.io/badge/Go-1.22-00ADD8?style=flat&logo=go" alt="Go Version" />
+    <img src="https://img.shields.io/badge/Go-1.26-00ADD8?style=flat&logo=go" alt="Go Version" />
     <img src="https://img.shields.io/badge/Vue-3.4-4FC08D?style=flat&logo=vuedotjs" alt="Vue Version" />
     <img src="https://img.shields.io/badge/PrimeVue-4.0-06B6D4?style=flat" alt="PrimeVue" />
     <img src="https://img.shields.io/badge/PWA-Ready-3b82f6?style=flat" alt="PWA" />
@@ -28,7 +28,7 @@ Traditional expense sharing apps treat every bill as an isolated pairwise debt (
 
 ## 🚀 Key Features
 
-- **Split-Screen Trip Creation Wizard**: 3-step live route & budget planner with instant Boarding Pass preview.
+- **Split-Screen Trip Creation Wizard**: 3-step route planner with OpenStreetMap place suggestions, nearby locations, ordered stops, and a live driving-route map.
 - **Central Treasury Management**: Real-time cash-in-hand monitoring, confirmed receipt logging, and group expense classification.
 - **Peer Expense Claims & Receipt Audit**: Members submit bills with photo/PDF proofs; Munimji and Co-Reviewers review and approve in atomic transactions.
 - **Fair-Share Settlement Engine (Zero-Paise-Loss)**:
@@ -66,7 +66,7 @@ splito/
 ## 🏁 Quick Start Guide
 
 ### Prerequisites
-- [Go 1.22+](https://golang.org/dl/)
+- [Go 1.26+](https://go.dev/dl/)
 - [Node.js 20+](https://nodejs.org/)
 - [MySQL 8.0+](https://dev.mysql.com/downloads/mysql/)
 
@@ -93,6 +93,8 @@ npm run dev
 ```
 
 Visit `http://localhost:5173` (or `http://localhost:8080` if served through the Go server).
+
+Location suggestions use OpenStreetMap data via Photon and Overpass; route previews use OSRM and OpenStreetMap tiles. These public services require an internet connection and may be rate-limited. Map data attribution is shown in the UI.
 
 ---
 

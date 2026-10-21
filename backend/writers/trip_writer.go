@@ -20,17 +20,51 @@ func NewTripWriter(db *sql.DB) *TripWriter {
 
 func (w *TripWriter) CreateTripTx(ctx context.Context, tx *sql.Tx, trip *models.Trip) (int64, error) {
 	query := `
-		INSERT INTO trips (name, start_location, destination, start_date, end_date, estimated_budget, created_by, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO trips (name, start_location, start_latitude, start_longitude, destination, destination_latitude, destination_longitude, start_date, end_date, estimated_budget, created_by, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	res, err := tx.ExecContext(ctx, query,
-		trip.Name, trip.StartLocation, trip.Destination, trip.StartDate, trip.EndDate,
+		trip.Name, trip.StartLocation, trip.StartLatitude, trip.StartLongitude,
+		trip.Destination, trip.DestLatitude, trip.DestLongitude, trip.StartDate, trip.EndDate,
 		trip.EstimatedBudget, trip.CreatedBy, trip.Status,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert trip: %w", err)
 	}
 	return res.LastInsertId()
+}
+
+func (w *TripWriter) SaveStopsTx(ctx context.Context, tx *sql.Tx, tripID int64, stops []models.TripStop) error {
+	for position, stop := range stops {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO trip_stops (trip_id, position, name, latitude, longitude)
+			VALUES (?, ?, ?, ?, ?)
+		`, tripID, position, stop.Name, stop.Latitude, stop.Longitude)
+		if err != nil {
+			return fmt.Errorf("failed to save trip stop %d: %w", position+1, err)
+		}
+	}
+	return nil
+}
+
+func (w *TripWriter) UpdateTripTx(ctx context.Context, tx *sql.Tx, trip *models.Trip, stops []models.TripStop) error {
+	_, err := tx.ExecContext(ctx, `
+		UPDATE trips
+		SET name = ?, start_location = ?, start_latitude = ?, start_longitude = ?,
+		    destination = ?, destination_latitude = ?, destination_longitude = ?,
+		    start_date = ?, end_date = ?, estimated_budget = ?
+		WHERE id = ?
+	`, trip.Name, trip.StartLocation, trip.StartLatitude, trip.StartLongitude,
+		trip.Destination, trip.DestLatitude, trip.DestLongitude,
+		trip.StartDate, trip.EndDate, trip.EstimatedBudget, trip.ID)
+	if err != nil {
+		return fmt.Errorf("failed to update trip: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, "DELETE FROM trip_stops WHERE trip_id = ?", trip.ID); err != nil {
+		return fmt.Errorf("failed to replace existing trip stops: %w", err)
+	}
+	return w.SaveStopsTx(ctx, tx, trip.ID, stops)
 }
 
 func (w *TripWriter) AddMemberTx(ctx context.Context, tx *sql.Tx, tripID, userID int64, role models.Role, status models.MembershipStatus) error {
@@ -242,4 +276,3 @@ func (w *TripWriter) DeleteTrip(ctx context.Context, tripID int64) error {
 
 	return tx.Commit()
 }
-

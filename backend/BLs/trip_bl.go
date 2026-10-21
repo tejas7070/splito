@@ -20,6 +20,14 @@ var (
 // CheckTripDateOverlap checks if a user has any conflicting active trips using strict date boundaries:
 // user_details row is locked using SELECT FOR UPDATE to serialize checks
 func CheckTripDateOverlap(ctx context.Context, tx *sql.Tx, userID int64, newStart, newEnd time.Time) error {
+	return checkTripDateOverlap(ctx, tx, userID, 0, newStart, newEnd)
+}
+
+func CheckTripDateOverlapExcept(ctx context.Context, tx *sql.Tx, userID, excludedTripID int64, newStart, newEnd time.Time) error {
+	return checkTripDateOverlap(ctx, tx, userID, excludedTripID, newStart, newEnd)
+}
+
+func checkTripDateOverlap(ctx context.Context, tx *sql.Tx, userID, excludedTripID int64, newStart, newEnd time.Time) error {
 	var lockedUserID int64
 	err := tx.QueryRowContext(ctx, "SELECT id FROM user_details WHERE id = ? FOR UPDATE", userID).Scan(&lockedUserID)
 	if err != nil {
@@ -35,6 +43,7 @@ func CheckTripDateOverlap(ctx context.Context, tx *sql.Tx, userID int64, newStar
 		  AND t.status IN ('planned', 'active')
 		  AND t.start_date <= ?
 		  AND t.end_date >= ?
+		  AND (? = 0 OR t.id <> ?)
 		LIMIT 1
 	`
 
@@ -42,7 +51,7 @@ func CheckTripDateOverlap(ctx context.Context, tx *sql.Tx, userID int64, newStar
 	var name string
 	var start, end time.Time
 
-	err = tx.QueryRowContext(ctx, query, userID, newEnd, newStart).Scan(&conflictID, &name, &start, &end)
+	err = tx.QueryRowContext(ctx, query, userID, newEnd, newStart, excludedTripID, excludedTripID).Scan(&conflictID, &name, &start, &end)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil // No conflict
 	}

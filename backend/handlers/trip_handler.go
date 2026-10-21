@@ -38,7 +38,7 @@ func (h *TripHandler) CreateTrip(c *gin.Context) {
 		return
 	}
 
-	// Server-side strict sanitization & validation (block SQL injection / XSS patterns)
+	// Keep title validation consistent with the trip wizard; location labels are parameterized in SQL.
 	dangerousPattern := func(s string) bool {
 		for _, ch := range []string{"<", ">", ";", "'", "\"", "--", "/*", "*/"} {
 			if strings.Contains(s, ch) {
@@ -48,8 +48,8 @@ func (h *TripHandler) CreateTrip(c *gin.Context) {
 		return false
 	}
 
-	if dangerousPattern(req.Title) || dangerousPattern(req.StartPoint) || dangerousPattern(req.Destination) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Inputs contain disallowed special characters (< > ; ' \" -- /* */)"})
+	if dangerousPattern(req.Title) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Trip title contains disallowed special characters"})
 		return
 	}
 
@@ -60,6 +60,32 @@ func (h *TripHandler) CreateTrip(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, trip)
+}
+
+func (h *TripHandler) UpdateTrip(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var req types.UpdateTripRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if strings.ContainsAny(req.Title, "<>;'\"") || strings.Contains(req.Title, "--") ||
+		strings.Contains(req.Title, "/*") || strings.Contains(req.Title, "*/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Trip title contains disallowed special characters"})
+		return
+	}
+
+	trip, err := h.tripService.UpdateTrip(c.Request.Context(), userIDVal.(int64), &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, trip)
 }
 
 func (h *TripHandler) ListTrips(c *gin.Context) {
@@ -386,5 +412,3 @@ func (h *TripHandler) UpdateMemberRole(c *gin.Context) {
 		"role":    req.Role,
 	})
 }
-
-

@@ -13,7 +13,12 @@ export interface Trip {
   title: string;
   start_location?: string;
   start_point: string;
+  start_latitude?: number | null;
+  start_longitude?: number | null;
   destination: string;
+  destination_latitude?: number | null;
+  destination_longitude?: number | null;
+  stops?: TripStop[];
   start_date?: string;
   start_at: string;
   end_date?: string;
@@ -25,6 +30,28 @@ export interface Trip {
   creator_user_id?: number;
   user_role?: 'munimji' | 'co_reviewer' | 'participant';
   user_status?: 'invited' | 'active' | 'rejected' | 'left';
+}
+
+export interface TripStop {
+  id?: number;
+  position: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface PlaceSuggestion {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  nearby: boolean;
+  distance_km?: number;
+}
+
+export interface PlaceSearchResult {
+  suggestions: PlaceSuggestion[];
+  nearby_unavailable: boolean;
 }
 
 export interface DashboardSummary {
@@ -113,11 +140,31 @@ export const tripService = {
   create: (data: {
     title: string;
     start_point: string;
+    start_latitude: number;
+    start_longitude: number;
     destination: string;
+    destination_latitude: number;
+    destination_longitude: number;
     start_at: string;
     end_at: string;
     estimated_budget: number;
+    stops: Omit<TripStop, 'id' | 'position'>[];
   }) => api.post<Trip>('/trips/create', data),
+
+  update: (data: {
+    trip_id: number;
+    title: string;
+    start_point: string;
+    start_latitude: number;
+    start_longitude: number;
+    destination: string;
+    destination_latitude: number;
+    destination_longitude: number;
+    start_at: string;
+    end_at: string;
+    estimated_budget: number;
+    stops: Omit<TripStop, 'id' | 'position'>[];
+  }) => api.post<Trip>('/trips/update', data),
 
   list: () => api.post<Trip[]>('/trips/list', {}),
 
@@ -162,6 +209,11 @@ export const tripService = {
 
   updateMemberRole: (data: { trip_id: number; user_id: number; role: 'co_reviewer' | 'participant' }) =>
     api.post<{ message: string; role: string }>('/trips/members/role/update', data),
+};
+
+export const locationService = {
+  search: (query: string, signal?: AbortSignal) =>
+    api.get<PlaceSearchResult>('/locations/search', { params: { q: query }, signal }),
 };
 
 
@@ -328,4 +380,3 @@ export const accountingService = {
     });
   },
 };
-

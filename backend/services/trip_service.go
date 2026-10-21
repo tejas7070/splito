@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"net/smtp"
 	"strings"
 	"time"
@@ -51,6 +52,9 @@ func (s *TripService) CreateTrip(ctx context.Context, creatorUserID int64, req *
 	if req.StartAt.After(req.EndAt) {
 		return nil, errors.New("trip start_at must be before or equal to end_at")
 	}
+	if err := validateTripLocations(req.StartPoint, req.StartLatitude, req.StartLongitude, req.Destination, req.DestLatitude, req.DestLongitude, req.Stops); err != nil {
+		return nil, err
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -67,7 +71,11 @@ func (s *TripService) CreateTrip(ctx context.Context, creatorUserID int64, req *
 		Title:           req.Title,
 		StartLocation:   req.StartPoint,
 		StartPoint:      req.StartPoint,
+		StartLatitude:   req.StartLatitude,
+		StartLongitude:  req.StartLongitude,
 		Destination:     req.Destination,
+		DestLatitude:    req.DestLatitude,
+		DestLongitude:   req.DestLongitude,
 		StartDate:       req.StartAt,
 		StartAt:         req.StartAt,
 		EndDate:         req.EndAt,
@@ -75,6 +83,13 @@ func (s *TripService) CreateTrip(ctx context.Context, creatorUserID int64, req *
 		EstimatedBudget: req.EstimatedBudget,
 		Status:          models.TripStatusPlanned,
 		CreatedBy:       creatorUserID,
+		Stops:           make([]models.TripStop, len(req.Stops)),
+	}
+	for i, stop := range req.Stops {
+		trip.Stops[i] = models.TripStop{
+			TripID: trip.ID, Position: i, Name: stop.Name,
+			Latitude: *stop.Latitude, Longitude: *stop.Longitude,
+		}
 	}
 
 	tripID, err := s.tripWriter.CreateTripTx(ctx, tx, trip)
@@ -82,6 +97,12 @@ func (s *TripService) CreateTrip(ctx context.Context, creatorUserID int64, req *
 		return nil, err
 	}
 	trip.ID = tripID
+	for i := range trip.Stops {
+		trip.Stops[i].TripID = tripID
+	}
+	if err := s.tripWriter.SaveStopsTx(ctx, tx, tripID, trip.Stops); err != nil {
+		return nil, err
+	}
 
 	err = s.tripWriter.AddMemberTx(ctx, tx, tripID, creatorUserID, models.RoleMunimji, models.MembershipActive)
 	if err != nil {
@@ -92,6 +113,100 @@ func (s *TripService) CreateTrip(ctx context.Context, creatorUserID int64, req *
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
+	return trip, nil
+}
+
+func validateTripLocations(startName string, startLatitude, startLongitude *float64, destinationName string, destinationLatitude, destinationLongitude *float64, stops []types.TripStopInput) error {
+	if len(stops) > 20 {
+		return errors.New("a trip can have at most 20 stops")
+	}
+	if err := validateLocation(startName, startLatitude, startLongitude); err != nil {
+		return fmt.Errorf("starting point: %w", err)
+	}
+	if err := validateLocation(destinationName, destinationLatitude, destinationLongitude); err != nil {
+		return fmt.Errorf("destination: %w", err)
+	}
+	for i, stop := range stops {
+		if err := validateLocation(stop.Name, stop.Latitude, stop.Longitude); err != nil {
+			return fmt.Errorf("stop %d: %w", i+1, err)
+		}
+	}
+	return nil
+}
+
+func validateLocation(name string, latitude, longitude *float64) error {
+	if strings.TrimSpace(name) == "" || len(name) > 255 {
+		return errors.New("name must be between 1 and 255 characters")
+	}
+	if latitude == nil || longitude == nil ||
+		math.IsNaN(*latitude) || math.IsInf(*latitude, 0) ||
+		math.IsNaN(*longitude) || math.IsInf(*longitude, 0) ||
+		*latitude < -90 || *latitude > 90 || *longitude < -180 || *longitude > 180 {
+		return errors.New("select a valid map location")
+	}
+	return nil
+}
+
+func (s *TripService) UpdateTrip(ctx context.Context, userID int64, req *types.UpdateTripRequest) (*models.Trip, error) {
+	if req.StartAt.After(req.EndAt) {
+		return nil, errors.New("trip start_at must be before or equal to end_at")
+	}
+	if err := validateTripLocations(req.StartPoint, req.StartLatitude, req.StartLongitude, req.Destination, req.DestLatitude, req.DestLongitude, req.Stops); err != nil {
+		return nil, err
+	}
+
+	trip, membership, err := s.GetTripDetail(ctx, req.TripID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if trip == nil {
+		return nil, errors.New("trip not found")
+	}
+	if membership == nil || membership.Status != models.MembershipActive || membership.Role != models.RoleMunimji {
+		return nil, errors.New("only an active Munimji can edit a trip")
+	}
+	if trip.Status != models.TripStatusPlanned && trip.Status != models.TripStatusActive {
+		return nil, errors.New("only planned or active trips can be edited")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := BLs.CheckTripDateOverlapExcept(ctx, tx, userID, req.TripID, req.StartAt, req.EndAt); err != nil {
+		return nil, err
+	}
+
+	trip.Name = req.Title
+	trip.Title = req.Title
+	trip.StartLocation = req.StartPoint
+	trip.StartPoint = req.StartPoint
+	trip.StartLatitude = req.StartLatitude
+	trip.StartLongitude = req.StartLongitude
+	trip.Destination = req.Destination
+	trip.DestLatitude = req.DestLatitude
+	trip.DestLongitude = req.DestLongitude
+	trip.StartDate = req.StartAt
+	trip.StartAt = req.StartAt
+	trip.EndDate = req.EndAt
+	trip.EndAt = req.EndAt
+	trip.EstimatedBudget = req.EstimatedBudget
+	trip.Stops = make([]models.TripStop, len(req.Stops))
+	for i, stop := range req.Stops {
+		trip.Stops[i] = models.TripStop{
+			TripID: req.TripID, Position: i, Name: stop.Name,
+			Latitude: *stop.Latitude, Longitude: *stop.Longitude,
+		}
+	}
+
+	if err := s.tripWriter.UpdateTripTx(ctx, tx, trip, trip.Stops); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit trip update: %w", err)
+	}
 	return trip, nil
 }
 
@@ -363,7 +478,6 @@ func (s *TripService) GetSettlement(ctx context.Context, tripID int64) (*types.T
 
 	return BLs.CalculateSettlement(tripID, members, contribs, expenses, claims), nil
 }
-
 
 // GenerateTripReport generates an executive, high-aesthetic PDF settlement report
 func (s *TripService) GenerateTripReport(ctx context.Context, tripID int64) (string, []byte, error) {
@@ -781,4 +895,3 @@ func (s *TripService) UpdateMemberRole(ctx context.Context, munimjiID int64, req
 
 	return s.tripWriter.UpdateMemberRole(ctx, req.TripID, req.UserID, targetRole)
 }
-
