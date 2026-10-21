@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"io"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -268,8 +269,10 @@ func (s *AuthService) dispatchOTPEmail(toEmail, code, subject, title, badge, des
 
 		// 1. Try Resend HTTP API (Port 443 - 100% unblocked on Render Free tier)
 		if s.cfg.ResendAPIKey != "" {
+			// Resend requires onboarding@resend.dev unless a custom verified domain is used (never accepts @gmail.com)
 			sender := "Splito <onboarding@resend.dev>"
-			if s.cfg.SMTPFrom != "" && strings.Contains(s.cfg.SMTPFrom, "@") {
+			cleanFrom := strings.ToLower(strings.TrimSpace(s.cfg.SMTPFrom))
+			if cleanFrom != "" && strings.Contains(cleanFrom, "@") && !strings.HasSuffix(cleanFrom, "@gmail.com") && !strings.HasSuffix(cleanFrom, "@yahoo.com") {
 				sender = s.cfg.SMTPFrom
 			}
 			resendPayload := map[string]interface{}{
@@ -287,12 +290,13 @@ func (s *AuthService) dispatchOTPEmail(toEmail, code, subject, title, badge, des
 					client := &http.Client{Timeout: 10 * time.Second}
 					resp, err := client.Do(req)
 					if err == nil {
+						bodyBytes, _ := io.ReadAll(resp.Body)
 						resp.Body.Close()
 						if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 							fmt.Printf("[SPLITO EMAIL SUCCESS] Dispatched OTP to %s via Resend API\n", toEmail)
 							return
 						}
-						fmt.Printf("[SPLITO RESEND ERROR] HTTP %d\n", resp.StatusCode)
+						fmt.Printf("[SPLITO RESEND ERROR] HTTP %d: %s\n", resp.StatusCode, string(bodyBytes))
 					} else {
 						fmt.Printf("[SPLITO RESEND ERROR] %v\n", err)
 					}
