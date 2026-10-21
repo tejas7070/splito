@@ -63,12 +63,38 @@ type GoogleAuthRequest struct {
 }
 
 type CreateTripRequest struct {
-	Title           string    `json:"title" binding:"required"`
-	StartPoint      string    `json:"start_point" binding:"required"`
-	Destination     string    `json:"destination" binding:"required"`
-	StartAt         time.Time `json:"start_at" binding:"required"`
-	EndAt           time.Time `json:"end_at" binding:"required"`
-	EstimatedBudget float64   `json:"estimated_budget"`
+	Title           string          `json:"title" binding:"required"`
+	StartPoint      string          `json:"start_point" binding:"required"`
+	StartLatitude   *float64        `json:"start_latitude"`
+	StartLongitude  *float64        `json:"start_longitude"`
+	Destination     string          `json:"destination" binding:"required"`
+	DestLatitude    *float64        `json:"destination_latitude"`
+	DestLongitude   *float64        `json:"destination_longitude"`
+	StartAt         time.Time       `json:"start_at" binding:"required"`
+	EndAt           time.Time       `json:"end_at" binding:"required"`
+	EstimatedBudget float64         `json:"estimated_budget"`
+	Stops           []TripStopInput `json:"stops"`
+}
+
+type UpdateTripRequest struct {
+	TripID          int64           `json:"trip_id" binding:"required"`
+	Title           string          `json:"title" binding:"required"`
+	StartPoint      string          `json:"start_point" binding:"required"`
+	StartLatitude   *float64        `json:"start_latitude"`
+	StartLongitude  *float64        `json:"start_longitude"`
+	Destination     string          `json:"destination" binding:"required"`
+	DestLatitude    *float64        `json:"destination_latitude"`
+	DestLongitude   *float64        `json:"destination_longitude"`
+	StartAt         time.Time       `json:"start_at" binding:"required"`
+	EndAt           time.Time       `json:"end_at" binding:"required"`
+	EstimatedBudget float64         `json:"estimated_budget"`
+	Stops           []TripStopInput `json:"stops"`
+}
+
+type TripStopInput struct {
+	Name      string   `json:"name" binding:"required"`
+	Latitude  *float64 `json:"latitude"`
+	Longitude *float64 `json:"longitude"`
 }
 
 type TripDetailRequest struct {
@@ -202,16 +228,15 @@ type ParticipantBalance struct {
 }
 
 type TripSettlementResponse struct {
-	TripID              int64                      `json:"trip_id"`
-	TotalTripCost       float64                    `json:"total_trip_cost"`
-	TotalTripCostPaise  int64                      `json:"total_trip_cost_paise"`
-	GroupSpendPaise     int64                      `json:"group_spend_paise"`
-	ApprovedClaimsPaise int64                      `json:"approved_claims_paise"`
-	EqualSharePerUser   float64                    `json:"equal_share_per_user"`
-	MemberCount         int                        `json:"member_count"`
-	TreasurySummary     TreasurySettlementSummary  `json:"treasury_summary"`
-	GroupClaims         []GroupClaimSettlement     `json:"group_claims"`
-	Balances            []ParticipantBalance       `json:"balances"`
-	Transfers           []SettlementTransfer       `json:"transfers"`
+	TripID              int64                     `json:"trip_id"`
+	TotalTripCost       float64                   `json:"total_trip_cost"`
+	TotalTripCostPaise  int64                     `json:"total_trip_cost_paise"`
+	GroupSpendPaise     int64                     `json:"group_spend_paise"`
+	ApprovedClaimsPaise int64                     `json:"approved_claims_paise"`
+	EqualSharePerUser   float64                   `json:"equal_share_per_user"`
+	MemberCount         int                       `json:"member_count"`
+	TreasurySummary     TreasurySettlementSummary `json:"treasury_summary"`
+	GroupClaims         []GroupClaimSettlement    `json:"group_claims"`
+	Balances            []ParticipantBalance      `json:"balances"`
+	Transfers           []SettlementTransfer      `json:"transfers"`
 }
-

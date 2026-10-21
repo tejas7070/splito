@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
 import { useToast } from '../stores/toast';
-import { tripService, claimService, accountingService, type Trip, type DashboardSummary, type TripInvitation, type EligibleUser } from '../api/services';
+import { tripService, claimService, accountingService, type Trip, type DashboardSummary, type TripInvitation, type EligibleUser, type PlaceSuggestion } from '../api/services';
 import { useOfflineSync } from '../services/offlineSync';
 import appFavicon from '../assets/favicon.png';
+import LocationAutocomplete from '../components/LocationAutocomplete.vue';
+import type { RouteMapPoint } from '../components/RouteMap.vue';
 
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
@@ -23,6 +25,8 @@ import AutoComplete from 'primevue/autocomplete';
 import Password from 'primevue/password';
 import Select from 'primevue/select';
 
+const RouteMap = defineAsyncComponent(() => import('../components/RouteMap.vue'));
+
 const authStore = useAuthStore();
 const themeStore = useThemeStore();
 const toast = useToast();
@@ -37,24 +41,48 @@ const loading = ref(false);
 const mobileSidebarOpen = ref(false);
 
 const isCreatingTrip = ref(false);
+const editingTripId = ref<number | null>(null);
 const wizardStep = ref<1 | 2 | 3 | 4>(1);
 const creatingTripLoading = ref(false);
 const createdTripResult = ref<Trip | null>(null);
 
+interface EditableStop {
+  input: string;
+  place: PlaceSuggestion | null;
+}
+
 const wizardForm = ref({
   title: '',
   start_point: '',
+  start_place: null as PlaceSuggestion | null,
   destination: '',
+  destination_place: null as PlaceSuggestion | null,
+  stops: [] as EditableStop[],
   start_at: '',
   end_at: '',
   estimated_budget: 50000 as number | null,
 });
 
+const wizardHeading = computed(() => editingTripId.value ? 'Edit Trip Route' : 'Plan New Trip');
+const routeMapPoints = computed<RouteMapPoint[]>(() => {
+  const { start_place, destination_place, stops } = wizardForm.value;
+  if (!start_place || !destination_place || stops.some((stop) => !stop.place)) return [];
+  return [
+    { ...start_place, kind: 'start' },
+    ...stops.map((stop) => ({ ...stop.place!, kind: 'stop' as const })),
+    { ...destination_place, kind: 'destination' },
+  ];
+});
+
 const openCreateTripWizard = () => {
+  editingTripId.value = null;
   wizardForm.value = {
     title: '',
     start_point: '',
+    start_place: null,
     destination: '',
+    destination_place: null,
+    stops: [],
     start_at: '',
     end_at: '',
     estimated_budget: 50000,
@@ -68,10 +96,51 @@ const cancelCreateTripWizard = () => {
   isCreatingTrip.value = false;
   wizardStep.value = 1;
   createdTripResult.value = null;
+  editingTripId.value = null;
 };
 
 const hasDisallowedChars = (val: string) => {
   return /[<>;'"]|--|\/\*|\*\//.test(val);
+};
+
+const openEditTripWizard = async () => {
+  if (!selectedTrip.value) return;
+  creatingTripLoading.value = true;
+  try {
+    const { data } = await tripService.getDetail(selectedTrip.value.id);
+    const trip = data.trip;
+    const toPlace = (name: string, latitude?: number | null, longitude?: number | null): PlaceSuggestion | null => {
+      if (latitude == null || longitude == null) return null;
+      return { id: `saved-${latitude}-${longitude}`, name, latitude, longitude, nearby: false };
+    };
+    const toLocalDateTime = (value: string) => {
+      const date = new Date(value);
+      return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+    };
+
+    editingTripId.value = trip.id;
+    wizardForm.value = {
+      title: trip.title || trip.name || '',
+      start_point: trip.start_point || trip.start_location || '',
+      start_place: toPlace(trip.start_point || trip.start_location || '', trip.start_latitude, trip.start_longitude),
+      destination: trip.destination,
+      destination_place: toPlace(trip.destination, trip.destination_latitude, trip.destination_longitude),
+      stops: (trip.stops || []).map((stop) => ({
+        input: stop.name,
+        place: { id: `saved-stop-${stop.id}`, name: stop.name, latitude: stop.latitude, longitude: stop.longitude, nearby: false },
+      })),
+      start_at: toLocalDateTime(trip.start_at),
+      end_at: toLocalDateTime(trip.end_at),
+      estimated_budget: trip.estimated_budget ?? 0,
+    };
+    wizardStep.value = 1;
+    createdTripResult.value = null;
+    isCreatingTrip.value = true;
+  } catch (err: any) {
+    toast.error(err.response?.data?.error || 'Unable to load trip details for editing');
+  } finally {
+    creatingTripLoading.value = false;
+  }
 };
 
 const isStep1Valid = computed(() => {
@@ -84,8 +153,9 @@ const isStep2Valid = computed(() => {
   const startP = f.start_point?.trim() || '';
   const dest = f.destination?.trim() || '';
   return Boolean(
-    startP.length >= 2 && !hasDisallowedChars(startP) &&
-    dest.length >= 2 && !hasDisallowedChars(dest) &&
+    startP.length >= 2 && f.start_place &&
+    dest.length >= 2 && f.destination_place &&
+    f.stops.every((stop) => stop.place) &&
     f.start_at && f.end_at &&
     new Date(f.start_at) <= new Date(f.end_at)
   );
@@ -114,13 +184,11 @@ const nextWizardStep = () => {
     }
     wizardStep.value = 2;
   } else if (wizardStep.value === 2) {
-    if (hasDisallowedChars(wizardForm.value.start_point || '') || hasDisallowedChars(wizardForm.value.destination || '')) {
-      toast.error('Locations contain disallowed special characters (< > ; \' " -- /* */)');
-      return;
-    }
     if (!isStep2Valid.value) {
       if (!wizardForm.value.start_point?.trim() || !wizardForm.value.destination?.trim()) {
         toast.error('Please provide both the starting point and destination');
+      } else if (!wizardForm.value.start_place || !wizardForm.value.destination_place || wizardForm.value.stops.some((stop) => !stop.place)) {
+        toast.error('Choose a suggested map location for the start, destination, and each stop');
       } else if (!wizardForm.value.start_at || !wizardForm.value.end_at) {
         toast.error('Please choose both start and end dates');
       } else if (new Date(wizardForm.value.start_at) > new Date(wizardForm.value.end_at)) {
@@ -132,14 +200,33 @@ const nextWizardStep = () => {
   }
 };
 
+const addTripStop = () => {
+  if (wizardForm.value.stops.length >= 20) {
+    toast.warn('A trip can have at most 20 stops');
+    return;
+  }
+  wizardForm.value.stops.push({ input: '', place: null });
+};
+
+const removeTripStop = (index: number) => {
+  wizardForm.value.stops.splice(index, 1);
+};
+
+const moveTripStop = (index: number, offset: -1 | 1) => {
+  const target = index + offset;
+  if (target < 0 || target >= wizardForm.value.stops.length) return;
+  const stops = wizardForm.value.stops;
+  [stops[index], stops[target]] = [stops[target], stops[index]];
+};
+
 const prevWizardStep = () => {
   if (wizardStep.value === 2) wizardStep.value = 1;
   else if (wizardStep.value === 3) wizardStep.value = 2;
 };
 
 const handleWizardSubmit = async () => {
-  if (hasDisallowedChars(wizardForm.value.title) || hasDisallowedChars(wizardForm.value.start_point) || hasDisallowedChars(wizardForm.value.destination)) {
-    toast.error('Disallowed characters detected (< > ; \' " -- /* */). Please clean up your inputs.');
+  if (hasDisallowedChars(wizardForm.value.title)) {
+    toast.error('Trip name contains disallowed characters.');
     return;
   }
   if (!isStep1Valid.value || !isStep2Valid.value || !isStep3Valid.value) {
@@ -149,16 +236,39 @@ const handleWizardSubmit = async () => {
   creatingTripLoading.value = true;
   try {
     const budgetVal = Number(wizardForm.value.estimated_budget || 0);
-
-    const res = await tripService.create({
+    const startPlace = wizardForm.value.start_place!;
+    const destinationPlace = wizardForm.value.destination_place!;
+    const tripPayload = {
       title: wizardForm.value.title.trim(),
-      start_point: wizardForm.value.start_point.trim(),
-      destination: wizardForm.value.destination.trim(),
+      start_point: startPlace.name,
+      start_latitude: startPlace.latitude,
+      start_longitude: startPlace.longitude,
+      destination: destinationPlace.name,
+      destination_latitude: destinationPlace.latitude,
+      destination_longitude: destinationPlace.longitude,
       start_at: new Date(wizardForm.value.start_at).toISOString(),
       end_at: new Date(wizardForm.value.end_at).toISOString(),
       estimated_budget: budgetVal,
-    });
+      stops: wizardForm.value.stops.map((stop) => ({
+        name: stop.place!.name,
+        latitude: stop.place!.latitude,
+        longitude: stop.place!.longitude,
+      })),
+    };
 
+    if (editingTripId.value) {
+      const res = await tripService.update({ ...tripPayload, trip_id: editingTripId.value });
+      const updatedTrip = res.data;
+      editingTripId.value = null;
+      isCreatingTrip.value = false;
+      wizardStep.value = 1;
+      await loadTrips(false);
+      await selectTrip(updatedTrip);
+      toast.success(`Trip "${updatedTrip.title || updatedTrip.name}" updated successfully!`);
+      return;
+    }
+
+    const res = await tripService.create(tripPayload);
     const newTrip = res.data;
     createdTripResult.value = newTrip;
     // Refresh trips list in background without auto-selecting away from wizard
@@ -183,6 +293,7 @@ const handleRedirectToCreatedTrip = async () => {
   } else {
     isCreatingTrip.value = false;
     wizardStep.value = 1;
+    editingTripId.value = null;
   }
 };
 const showClaimModal = ref(false);
@@ -1098,9 +1209,10 @@ const loadTrips = async (autoSelect: boolean = true) => {
 
 const selectTrip = async (trip: Trip) => {
   isCreatingTrip.value = false;
-  selectedTrip.value = trip;
   mobileSidebarOpen.value = false;
   try {
+    const detail = await tripService.getDetail(trip.id);
+    selectedTrip.value = detail.data.trip;
     const res = await tripService.getDashboard(trip.id);
     dashboard.value = res.data;
     await loadClaims(trip.id);
@@ -1573,6 +1685,9 @@ onMounted(async () => {
                 <span class="pass-city-name">{{ wizardForm.destination.trim() || 'Destination city' }}</span>
               </div>
             </div>
+            <div v-if="wizardForm.stops.length" class="pass-stop-list">
+              VIA {{ wizardForm.stops.map((stop) => stop.place?.name || stop.input).filter(Boolean).join('  ·  ') }}
+            </div>
 
             <!-- Ticket Perforation Divider -->
             <div class="pass-perforation-divider">
@@ -1632,7 +1747,7 @@ onMounted(async () => {
           <div class="wizard-top-nav">
             <div class="wizard-branding">
               <span class="wizard-badge">TRIP SETUP</span>
-              <h1 class="wizard-headline brand-font">Plan New Trip</h1>
+              <h1 class="wizard-headline brand-font">{{ wizardHeading }}</h1>
             </div>
             <Button 
               v-if="wizardStep !== 4"
@@ -1780,24 +1895,85 @@ onMounted(async () => {
                   <label class="form-label font-bold">
                     <i class="pi pi-map-marker text-emerald-500 mr-1"></i> Starting Point
                   </label>
-                  <InputText 
-                    v-model="wizardForm.start_point" 
-                    placeholder="e.g. Mumbai, Pune, Delhi" 
-                    class="wizard-neu-input" 
+                  <LocationAutocomplete
+                    v-model="wizardForm.start_point"
+                    ariaLabel="Starting point"
+                    placeholder="Search a city or place"
+                    @select="wizardForm.start_place = $event"
                   />
-                  <span class="input-hint-subtle">Where your group will start the journey from.</span>
+                  <span class="input-hint-subtle">Choose a suggested place to pin the start on the map.</span>
                 </div>
 
                 <div class="form-control">
                   <label class="form-label font-bold">
                     <i class="pi pi-flag text-rose-500 mr-1"></i> Destination
                   </label>
-                  <InputText 
-                    v-model="wizardForm.destination" 
-                    placeholder="e.g. Goa, Kasol, Manali" 
-                    class="wizard-neu-input" 
+                  <LocationAutocomplete
+                    v-model="wizardForm.destination"
+                    ariaLabel="Destination"
+                    placeholder="Search a city or place"
+                    @select="wizardForm.destination_place = $event"
                   />
-                  <span class="input-hint-subtle">Where you are heading.</span>
+                  <span class="input-hint-subtle">Search by name or choose a nearby place.</span>
+                </div>
+              </div>
+
+              <div class="trip-stops-editor">
+                <div class="trip-stops-heading">
+                  <div>
+                    <span class="form-label font-bold">Stops and halts</span>
+                    <span class="input-hint-subtle">Add the places you plan to stop at, in travel order.</span>
+                  </div>
+                  <Button
+                    type="button"
+                    label="Add stop"
+                    icon="pi pi-plus"
+                    size="small"
+                    severity="secondary"
+                    outlined
+                    :disabled="wizardForm.stops.length >= 20"
+                    @click="addTripStop"
+                  />
+                </div>
+                <div v-for="(stop, index) in wizardForm.stops" :key="index" class="trip-stop-row">
+                  <span class="trip-stop-order">{{ index + 1 }}</span>
+                  <LocationAutocomplete
+                    v-model="stop.input"
+                    :ariaLabel="`Stop ${index + 1}`"
+                    placeholder="Search a stop or halt"
+                    @select="stop.place = $event"
+                  />
+                  <div class="trip-stop-controls">
+                    <Button
+                      type="button"
+                      icon="pi pi-arrow-up"
+                      severity="secondary"
+                      text
+                      rounded
+                      :disabled="index === 0"
+                      :aria-label="`Move stop ${index + 1} up`"
+                      @click="moveTripStop(index, -1)"
+                    />
+                    <Button
+                      type="button"
+                      icon="pi pi-arrow-down"
+                      severity="secondary"
+                      text
+                      rounded
+                      :disabled="index === wizardForm.stops.length - 1"
+                      :aria-label="`Move stop ${index + 1} down`"
+                      @click="moveTripStop(index, 1)"
+                    />
+                    <Button
+                      type="button"
+                      icon="pi pi-times"
+                      severity="danger"
+                      text
+                      rounded
+                      :aria-label="`Remove stop ${index + 1}`"
+                      @click="removeTripStop(index)"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1825,14 +2001,18 @@ onMounted(async () => {
                 </div>
               </div>
 
-              <!-- Live Route Preview Box -->
-              <div v-if="wizardForm.start_point && wizardForm.destination" class="wizard-route-preview">
-                <div class="preview-route-badge">
-                  <span class="preview-node">{{ wizardForm.start_point }}</span>
-                  <i class="pi pi-arrow-right text-xs opacity-60"></i>
-                  <span class="preview-node font-bold">{{ wizardForm.destination }}</span>
+              <div class="route-map-preview">
+                <div class="route-map-preview-heading">
+                  <div>
+                    <span class="form-label font-bold">Route preview</span>
+                    <span class="input-hint-subtle">Driving route with your selected stops.</span>
+                  </div>
+                  <span class="route-distance-note">Nearby place suggestions cover 20 km.</span>
                 </div>
-                <span class="preview-tagline">Route verified</span>
+                <RouteMap v-if="routeMapPoints.length >= 2" :points="routeMapPoints" />
+                <p v-else class="route-map-empty">
+                  Choose a suggested start, destination, and all added stops to preview the route.
+                </p>
               </div>
             </div>
 
@@ -2003,6 +2183,10 @@ onMounted(async () => {
             <h1 class="hero-title brand-font">{{ selectedTrip.title }}</h1>
             <div class="hero-route-line">
               <span class="route-node">{{ selectedTrip.start_point }}</span>
+              <template v-for="stop in selectedTrip.stops || []" :key="stop.id || stop.position">
+                <i class="pi pi-arrow-right route-arrow-icon"></i>
+                <span class="route-node">{{ stop.name }}</span>
+              </template>
               <i class="pi pi-arrow-right route-arrow-icon"></i>
               <span class="route-node">{{ selectedTrip.destination }}</span>
             </div>
@@ -2043,6 +2227,17 @@ onMounted(async () => {
               </div>
 
               <!-- Delete Expedition Button (Munimji Only) -->
+              <Button
+                v-if="isMunimji && ['planned', 'active'].includes(selectedTrip.status)"
+                @click="openEditTripWizard"
+                icon="pi pi-pencil"
+                label="Edit Route"
+                size="small"
+                severity="secondary"
+                outlined
+                :loading="creatingTripLoading"
+                class="btn-edit-expedition"
+              />
               <Button
                 v-if="isMunimji"
                 @click="showDeleteTripModal = true"
@@ -7395,5 +7590,92 @@ html.dark .neu-table td {
     margin: 4px 0;
   }
 }
-</style>
 
+.trip-stops-editor,
+.route-map-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.trip-stops-heading,
+.route-map-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.trip-stops-heading > div,
+.route-map-preview-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trip-stop-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 92px;
+  align-items: center;
+  gap: 8px;
+}
+
+.trip-stop-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0;
+}
+
+.trip-stop-order {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-inset);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.route-map-preview {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle, rgba(125, 133, 146, 0.2));
+}
+
+.route-distance-note,
+.route-map-empty {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.route-map-empty {
+  margin: 0;
+  padding: 20px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-inset);
+  text-align: center;
+}
+
+.pass-stop-list {
+  margin: -6px 0 16px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .trip-stops-heading,
+  .route-map-preview-heading {
+    align-items: flex-start;
+  }
+
+  .route-distance-note {
+    text-align: right;
+  }
+}
+</style>

@@ -43,10 +43,10 @@ const (
 type ClaimStatus string
 
 const (
-	ClaimStatusPending               ClaimStatus = "pending"
+	ClaimStatusPending                ClaimStatus = "pending"
 	ClaimStatusClarificationRequested ClaimStatus = "clarification_requested"
-	ClaimStatusApproved              ClaimStatus = "approved"
-	ClaimStatusRejected              ClaimStatus = "rejected"
+	ClaimStatusApproved               ClaimStatus = "approved"
+	ClaimStatusRejected               ClaimStatus = "rejected"
 )
 
 type ReimbursementStatus string
@@ -70,23 +70,37 @@ type User struct {
 
 // Matches trips table in splito_db
 type Trip struct {
-	ID              int64      `json:"id"`
-	Name            string     `json:"name"`
-	Title           string     `json:"title"` // alias for frontend compatibility
-	StartLocation   string     `json:"start_location"`
-	StartPoint      string     `json:"start_point"` // alias for frontend compatibility
-	Destination     string     `json:"destination"`
-	StartDate       time.Time  `json:"start_date"`
-	StartAt         time.Time  `json:"start_at"` // alias for frontend compatibility
-	EndDate         time.Time  `json:"end_date"`
-	EndAt           time.Time  `json:"end_at"` // alias for frontend compatibility
-	EstimatedBudget float64    `json:"estimated_budget"`
+	ID              int64            `json:"id"`
+	Name            string           `json:"name"`
+	Title           string           `json:"title"` // alias for frontend compatibility
+	StartLocation   string           `json:"start_location"`
+	StartPoint      string           `json:"start_point"` // alias for frontend compatibility
+	StartLatitude   *float64         `json:"start_latitude,omitempty"`
+	StartLongitude  *float64         `json:"start_longitude,omitempty"`
+	Destination     string           `json:"destination"`
+	DestLatitude    *float64         `json:"destination_latitude,omitempty"`
+	DestLongitude   *float64         `json:"destination_longitude,omitempty"`
+	StartDate       time.Time        `json:"start_date"`
+	StartAt         time.Time        `json:"start_at"` // alias for frontend compatibility
+	EndDate         time.Time        `json:"end_date"`
+	EndAt           time.Time        `json:"end_at"` // alias for frontend compatibility
+	EstimatedBudget float64          `json:"estimated_budget"`
+	Stops           []TripStop       `json:"stops"`
 	CreatedBy       int64            `json:"created_by"`
 	Status          TripStatus       `json:"status"`
 	UserRole        Role             `json:"user_role,omitempty"`
 	UserStatus      MembershipStatus `json:"user_status,omitempty"`
 	CreatedAt       time.Time        `json:"created_at"`
 	UpdatedAt       time.Time        `json:"updated_at"`
+}
+
+type TripStop struct {
+	ID        int64   `json:"id,omitempty"`
+	TripID    int64   `json:"trip_id,omitempty"`
+	Position  int     `json:"position"`
+	Name      string  `json:"name"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
 }
 
 // Matches trip_members table in splito_db

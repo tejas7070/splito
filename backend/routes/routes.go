@@ -15,6 +15,7 @@ func RegisterRoutes(
 	authHandler *handlers.AuthHandler,
 	tripHandler *handlers.TripHandler,
 	ledgerHandler *handlers.LedgerHandler,
+	locationHandler *handlers.LocationHandler,
 ) {
 	// CORS with exact origin allowlist (never '*') and credentials allowed
 	r.Use(middlewares.CORSMiddleware(cfg))
@@ -56,6 +57,7 @@ func RegisterRoutes(
 		trips := protected.Group("/trips")
 		{
 			trips.POST("/create", tripHandler.CreateTrip)
+			trips.POST("/update", tripHandler.UpdateTrip)
 			trips.POST("/list", tripHandler.ListTrips)
 			trips.POST("/detail", tripHandler.GetTrip)
 			trips.POST("/join", tripHandler.JoinTrip)
@@ -74,6 +76,7 @@ func RegisterRoutes(
 			trips.POST("/invitations/my-pending", tripHandler.ListMyPendingInvitations)
 		}
 
+		protected.GET("/locations/search", locationHandler.Search)
 
 		// Claims
 		claims := protected.Group("/claims")

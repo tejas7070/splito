@@ -74,6 +74,7 @@ export default defineConfig({
     proxy: {
       '/auth': 'http://localhost:8080',
       '/trips': 'http://localhost:8080',
+      '/locations': 'http://localhost:8080',
       '/claims': 'http://localhost:8080',
       '/accounting': 'http://localhost:8080',
       '/uploads': 'http://localhost:8080',

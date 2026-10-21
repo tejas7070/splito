@@ -45,9 +45,70 @@ func InitDB(cfg *config.Config) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	if err := ensureTripLocationSchema(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to ensure trip location schema: %w", err)
+	}
+
 	DB = db
 	ensureSchemaMigrations(db)
 	return db, nil
+}
+
+func ensureTripLocationSchema(db *sql.DB) error {
+	columns := []struct {
+		name       string
+		definition string
+	}{
+		{"start_latitude", "DECIMAL(10,7) NULL"},
+		{"start_longitude", "DECIMAL(10,7) NULL"},
+		{"destination_latitude", "DECIMAL(10,7) NULL"},
+		{"destination_longitude", "DECIMAL(10,7) NULL"},
+	}
+	for _, column := range columns {
+		var exists int
+		err := db.QueryRow(`
+			SELECT COUNT(*)
+			FROM information_schema.COLUMNS
+			WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trips' AND COLUMN_NAME = ?
+		`, column.name).Scan(&exists)
+		if err != nil {
+			return fmt.Errorf("check trips.%s: %w", column.name, err)
+		}
+		if exists == 0 {
+			if _, alterErr := db.Exec("ALTER TABLE trips ADD COLUMN " + column.name + " " + column.definition); alterErr != nil {
+				checkErr := db.QueryRow(`
+					SELECT COUNT(*)
+					FROM information_schema.COLUMNS
+					WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trips' AND COLUMN_NAME = ?
+				`, column.name).Scan(&exists)
+				if checkErr != nil {
+					return fmt.Errorf("add trips.%s: %w (could not verify concurrent migration: %v)", column.name, alterErr, checkErr)
+				}
+				if exists == 0 {
+					return fmt.Errorf("add trips.%s: %w", column.name, alterErr)
+				}
+			}
+		}
+	}
+
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS trip_stops (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+			trip_id BIGINT UNSIGNED NOT NULL,
+			position INT NOT NULL,
+			name VARCHAR(255) NOT NULL,
+			latitude DECIMAL(10,7) NOT NULL,
+			longitude DECIMAL(10,7) NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE KEY uq_trip_stop_position (trip_id, position),
+			CONSTRAINT fk_trip_stops_trip FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+	`)
+	if err != nil {
+		return fmt.Errorf("create trip_stops table: %w", err)
+	}
+	return nil
 }
 
 func ensureSchemaMigrations(db *sql.DB) {

@@ -54,9 +54,10 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService)
 	tripHandler := handlers.NewTripHandler(tripService, userLoader)
 	ledgerHandler := handlers.NewLedgerHandler(ledgerService)
+	locationHandler := handlers.NewLocationHandler(services.NewPlaceService())
 
 	// Register API Routes
-	routes.RegisterRoutes(router, cfg, authHandler, tripHandler, ledgerHandler)
+	routes.RegisterRoutes(router, cfg, authHandler, tripHandler, ledgerHandler, locationHandler)
 
 	// Health check & root endpoints for Render deployment verification (supports GET & HEAD on / and /health)
 	healthHandler := func(c *gin.Context) {
