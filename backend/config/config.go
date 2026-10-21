@@ -76,7 +76,7 @@ func LoadConfig() *Config {
 		SMTPFrom:       getEnv("SMTP_FROM", ""),
 		GoogleClientID: getEnv("GOOGLE_CLIENT_ID", ""),
 		AppEnv:         getEnv("APP_ENV", "development"),
-		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173"),
+		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "*"),
 	}
 }
 
