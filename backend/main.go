@@ -58,14 +58,18 @@ func main() {
 	// Register API Routes
 	routes.RegisterRoutes(router, cfg, authHandler, tripHandler, ledgerHandler)
 
-	// Health check endpoint
-	router.GET("/health", func(c *gin.Context) {
+	// Health check & root endpoints for Render deployment verification (supports GET & HEAD on / and /health)
+	healthHandler := func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":   "ok",
-			"app":      "Splito",
+			"app":      "Splito API",
 			"database": cfg.DBName,
 		})
-	})
+	}
+	router.GET("/health", healthHandler)
+	router.HEAD("/health", healthHandler)
+	router.GET("/", healthHandler)
+	router.HEAD("/", healthHandler)
 
 	// Serve Frontend Static Build if present
 	frontendDist := filepath.Join("..", "frontend", "dist")
