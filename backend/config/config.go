@@ -24,6 +24,8 @@ type Config struct {
 	SMTPUser       string
 	SMTPPass       string
 	SMTPFrom       string
+	ResendAPIKey   string
+	BrevoAPIKey    string
 	GoogleClientID string
 	AppEnv         string
 	AllowedOrigins string
@@ -74,6 +76,8 @@ func LoadConfig() *Config {
 		SMTPUser:   getEnv("SMTP_USER", ""),
 		SMTPPass:       getEnv("SMTP_PASS", ""),
 		SMTPFrom:       getEnv("SMTP_FROM", ""),
+		ResendAPIKey:   getEnv("RESEND_API_KEY", ""),
+		BrevoAPIKey:    getEnv("BREVO_API_KEY", ""),
 		GoogleClientID: getEnv("GOOGLE_CLIENT_ID", ""),
 		AppEnv:         getEnv("APP_ENV", "development"),
 		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "*"),

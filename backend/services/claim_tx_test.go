@@ -29,10 +29,10 @@ func TestClaimApproval_ConcurrentTwoGoroutines(t *testing.T) {
 	// Expectations for Goroutine 1 (Winner):
 	// Begin -> Query member (munimji, active) -> Query trip (active) -> Update claims (1 row affected) -> Commit
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\? FOR SHARE").
+	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\?").
 		WithArgs(int64(1), int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"role", "status"}).AddRow("munimji", "active"))
-	mock.ExpectQuery("SELECT status FROM trips WHERE id = \\? FOR SHARE").
+	mock.ExpectQuery("SELECT status FROM trips WHERE id = \\?").
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("active"))
 	mock.ExpectExec("UPDATE expense_claims SET status = \\?, reviewed_by = \\?, rejection_reason = \\?, reviewed_at = NOW\\(\\) WHERE id = \\? AND trip_id = \\? AND status = 'pending' AND claimant_id <> \\?").
@@ -48,10 +48,10 @@ func TestClaimApproval_ConcurrentTwoGoroutines(t *testing.T) {
 	// Expectations for Goroutine 2 (Conflict loser - already reviewed):
 	// Begin -> Query member (co_reviewer, active) -> Query trip (active) -> Update claims (0 rows affected) -> Rollback
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\? FOR SHARE").
+	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\?").
 		WithArgs(int64(1), int64(2)).
 		WillReturnRows(sqlmock.NewRows([]string{"role", "status"}).AddRow("co_reviewer", "active"))
-	mock.ExpectQuery("SELECT status FROM trips WHERE id = \\? FOR SHARE").
+	mock.ExpectQuery("SELECT status FROM trips WHERE id = \\?").
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("active"))
 	mock.ExpectExec("UPDATE expense_claims SET status = \\?, reviewed_by = \\?, rejection_reason = \\?, reviewed_at = NOW\\(\\) WHERE id = \\? AND trip_id = \\? AND status = 'pending' AND claimant_id <> \\?").
@@ -107,10 +107,10 @@ func TestClaimApproval_SelfApprovalForbidden(t *testing.T) {
 
 	// User 1 is Munimji and also the claimant
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\? FOR SHARE").
+	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\?").
 		WithArgs(int64(1), int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"role", "status"}).AddRow("munimji", "active"))
-	mock.ExpectQuery("SELECT status FROM trips WHERE id = \\? FOR SHARE").
+	mock.ExpectQuery("SELECT status FROM trips WHERE id = \\?").
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("active"))
 	// Claimant_id <> reviewerID fails in SQL WHERE clause -> 0 rows affected
@@ -143,7 +143,7 @@ func TestClaimApproval_NonMemberForbidden(t *testing.T) {
 
 	// Case 1: User 99 is not in trip_members (sql.ErrNoRows)
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\? FOR SHARE").
+	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\?").
 		WithArgs(int64(1), int64(99)).
 		WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
@@ -157,7 +157,7 @@ func TestClaimApproval_NonMemberForbidden(t *testing.T) {
 
 	// Case 2: User 3 is a participant, not reviewer
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\? FOR SHARE").
+	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\?").
 		WithArgs(int64(1), int64(3)).
 		WillReturnRows(sqlmock.NewRows([]string{"role", "status"}).AddRow("participant", "active"))
 	mock.ExpectRollback()
@@ -182,10 +182,10 @@ func TestClaimApproval_CompletedTripConflict(t *testing.T) {
 	ls := NewLedgerService(db, cfg, tl, el, ew)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\? FOR SHARE").
+	mock.ExpectQuery("SELECT role, status FROM trip_members WHERE trip_id = \\? AND user_id = \\?").
 		WithArgs(int64(1), int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"role", "status"}).AddRow("munimji", "active"))
-	mock.ExpectQuery("SELECT status FROM trips WHERE id = \\? FOR SHARE").
+	mock.ExpectQuery("SELECT status FROM trips WHERE id = \\?").
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("completed"))
 	mock.ExpectRollback()
