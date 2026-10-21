@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -183,7 +184,7 @@ func (s *AuthService) generateToken(user *models.User) (string, error) {
 }
 
 func (s *AuthService) dispatchOTPEmail(toEmail, code, subject, title, badge, description string) {
-	if s.cfg.SMTPHost == "" || s.cfg.SMTPUser == "" {
+	if s.cfg.ResendAPIKey == "" && s.cfg.BrevoAPIKey == "" && (s.cfg.SMTPHost == "" || s.cfg.SMTPUser == "") {
 		return
 	}
 	go func() {
@@ -265,11 +266,83 @@ func (s *AuthService) dispatchOTPEmail(toEmail, code, subject, title, badge, des
 			"Subject: %s\r\n"+
 			"Content-Type: text/html; charset=UTF-8\r\n\r\n", from, toEmail, subject)
 
-		msg := []byte(headers + htmlContent)
-		if err := smtp.SendMail(addr, auth, from, []string{toEmail}, msg); err != nil {
-			fmt.Printf("[SPLITO SMTP ERROR] Failed to send email to %s: %v\n", toEmail, err)
-		} else {
-			fmt.Printf("[SPLITO SMTP SUCCESS] Verification code dispatched to %s (%s)\n", toEmail, badge)
+		// 1. Try Resend HTTP API (Port 443 - 100% unblocked on Render Free tier)
+		if s.cfg.ResendAPIKey != "" {
+			sender := "Splito <onboarding@resend.dev>"
+			if s.cfg.SMTPFrom != "" && strings.Contains(s.cfg.SMTPFrom, "@") {
+				sender = s.cfg.SMTPFrom
+			}
+			resendPayload := map[string]interface{}{
+				"from":    sender,
+				"to":      []string{toEmail},
+				"subject": subject,
+				"html":    htmlContent,
+			}
+			jsonBytes, err := json.Marshal(resendPayload)
+			if err == nil {
+				req, err := http.NewRequest("POST", "https://api.resend.com/emails", bytes.NewBuffer(jsonBytes))
+				if err == nil {
+					req.Header.Set("Authorization", "Bearer "+s.cfg.ResendAPIKey)
+					req.Header.Set("Content-Type", "application/json")
+					client := &http.Client{Timeout: 10 * time.Second}
+					resp, err := client.Do(req)
+					if err == nil {
+						resp.Body.Close()
+						if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+							fmt.Printf("[SPLITO EMAIL SUCCESS] Dispatched OTP to %s via Resend API\n", toEmail)
+							return
+						}
+						fmt.Printf("[SPLITO RESEND ERROR] HTTP %d\n", resp.StatusCode)
+					} else {
+						fmt.Printf("[SPLITO RESEND ERROR] %v\n", err)
+					}
+				}
+			}
+		}
+
+		// 2. Try Brevo HTTP API (Port 443 - 100% unblocked on Render Free tier)
+		if s.cfg.BrevoAPIKey != "" {
+			brevoPayload := map[string]interface{}{
+				"sender": map[string]string{
+					"name":  "Splito",
+					"email": from,
+				},
+				"to": []map[string]string{
+					{"email": toEmail},
+				},
+				"subject":     subject,
+				"htmlContent": htmlContent,
+			}
+			jsonBytes, err := json.Marshal(brevoPayload)
+			if err == nil {
+				req, err := http.NewRequest("POST", "https://api.brevo.com/v3/smtp/email", bytes.NewBuffer(jsonBytes))
+				if err == nil {
+					req.Header.Set("api-key", s.cfg.BrevoAPIKey)
+					req.Header.Set("Content-Type", "application/json")
+					client := &http.Client{Timeout: 10 * time.Second}
+					resp, err := client.Do(req)
+					if err == nil {
+						resp.Body.Close()
+						if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+							fmt.Printf("[SPLITO EMAIL SUCCESS] Dispatched OTP to %s via Brevo API\n", toEmail)
+							return
+						}
+						fmt.Printf("[SPLITO BREVO ERROR] HTTP %d\n", resp.StatusCode)
+					} else {
+						fmt.Printf("[SPLITO BREVO ERROR] %v\n", err)
+					}
+				}
+			}
+		}
+
+		// 3. Fallback to standard SMTP (Port 587 - works on localhost)
+		if s.cfg.SMTPHost != "" && s.cfg.SMTPUser != "" {
+			msg := []byte(headers + htmlContent)
+			if err := smtp.SendMail(addr, auth, from, []string{toEmail}, msg); err != nil {
+				fmt.Printf("[SPLITO SMTP ERROR] Failed to send email to %s: %v (Note: Render Free Tier blocks outbound ports 25, 465, and 587; set RESEND_API_KEY or BREVO_API_KEY on Render for instant HTTPS delivery)\n", toEmail, err)
+			} else {
+				fmt.Printf("[SPLITO SMTP SUCCESS] Verification code dispatched to %s (%s)\n", toEmail, badge)
+			}
 		}
 	}()
 }

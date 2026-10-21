@@ -864,11 +864,6 @@ const handleResetPassword = async () => {
           </div>
         </div>
       </div>
-
-      <!-- Trust & Protocol Footer -->
-      <div class="card-footer">
-        <span class="footer-note">Munimji Treasury Protocol • SHA-256 / Bcrypt Auth</span>
-      </div>
     </div>
 
     <!-- Google Auth Dev / Fallback Dialog -->
@@ -1224,20 +1219,6 @@ const handleResetPassword = async () => {
   color: var(--text-muted);
   font-size: 11px;
   opacity: 0.5;
-}
-
-.card-footer {
-  margin-top: 28px;
-  text-align: center;
-}
-
-.footer-note {
-  font-size: 10px;
-  color: var(--text-muted);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  font-weight: 600;
-  opacity: 0.7;
 }
 
 @media (max-width: 480px) {

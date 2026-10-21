@@ -114,14 +114,13 @@ func (s *LedgerService) DecideClaim(ctx context.Context, reviewerID int64, req *
 	}
 	defer tx.Rollback()
 
-	// 1. Verify caller's role in this trip inside tx with FOR SHARE
+	// 1. Verify caller's role in this trip inside tx
 	var role models.Role
 	var membershipStatus models.MembershipStatus
 	err = tx.QueryRowContext(ctx, `
 		SELECT role, status 
 		FROM trip_members 
-		WHERE trip_id = ? AND user_id = ? 
-		FOR SHARE
+		WHERE trip_id = ? AND user_id = ?
 	`, req.TripID, reviewerID).Scan(&role, &membershipStatus)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -141,8 +140,7 @@ func (s *LedgerService) DecideClaim(ctx context.Context, reviewerID int64, req *
 	err = tx.QueryRowContext(ctx, `
 		SELECT status 
 		FROM trips 
-		WHERE id = ? 
-		FOR SHARE
+		WHERE id = ?
 	`, req.TripID).Scan(&tripStatus)
 	if err != nil {
 		return err
