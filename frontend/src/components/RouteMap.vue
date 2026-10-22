@@ -10,7 +10,27 @@ export interface RouteMapPoint {
   kind: 'start' | 'stop' | 'destination';
 }
 
-const props = defineProps<{ points: RouteMapPoint[] }>();
+const props = withDefaults(
+  defineProps<{
+    points: RouteMapPoint[];
+    hideDistanceSummary?: boolean;
+  }>(),
+  {
+    hideDistanceSummary: false,
+  }
+);
+
+const emit = defineEmits<{
+  'route-calculated': [
+    info: {
+      totalDistance: number;
+      legs: Array<{ from: string; to: string; distance: number }>;
+      isLoading: boolean;
+      error: string;
+    }
+  ];
+}>();
+
 const mapElement = ref<HTMLDivElement | null>(null);
 const routeNotice = ref('');
 const routeLegs = ref<Array<{ from: string; to: string; distance: number }>>([]);
@@ -46,6 +66,7 @@ async function renderRoute() {
   routeNotice.value = '';
   routeLegs.value = [];
   isLoadingRoute.value = true;
+  emit('route-calculated', { totalDistance: 0, legs: [], isLoading: true, error: '' });
   routeLayer.clearLayers();
 
   const coordinates = props.points.map((point) => `${point.longitude},${point.latitude}`).join(';');
@@ -73,9 +94,11 @@ async function renderRoute() {
       to: props.points[index + 1].name,
       distance: leg.distance,
     }));
+    emit('route-calculated', { totalDistance: totalDistance.value, legs: routeLegs.value, isLoading: false, error: '' });
   } catch {
     if (controller.signal.aborted) return;
     routeNotice.value = 'Road routing is unavailable; showing a direct-line preview instead.';
+    emit('route-calculated', { totalDistance: 0, legs: [], isLoading: false, error: routeNotice.value });
   } finally {
     if (!controller.signal.aborted) isLoadingRoute.value = false;
   }
@@ -101,6 +124,15 @@ async function renderRoute() {
   window.setTimeout(() => map?.invalidateSize(), 0);
 }
 
+let renderRouteTimer: ReturnType<typeof setTimeout> | undefined;
+
+const scheduleRenderRoute = () => {
+  if (renderRouteTimer) clearTimeout(renderRouteTimer);
+  renderRouteTimer = setTimeout(() => {
+    void renderRoute();
+  }, 300);
+};
+
 onMounted(() => {
   if (!mapElement.value) return;
   map = L.map(mapElement.value, { scrollWheelZoom: false });
@@ -112,9 +144,10 @@ onMounted(() => {
   void renderRoute();
 });
 
-watch(() => pointKey(props.points), () => void renderRoute());
+watch(() => pointKey(props.points), scheduleRenderRoute);
 
 onBeforeUnmount(() => {
+  if (renderRouteTimer) clearTimeout(renderRouteTimer);
   requestController?.abort();
   map?.remove();
   map = null;
@@ -126,7 +159,7 @@ onBeforeUnmount(() => {
   <div class="route-map-shell">
     <div ref="mapElement" class="route-map"></div>
     <section
-      v-if="isLoadingRoute || routeLegs.length"
+      v-if="!hideDistanceSummary && (isLoadingRoute || routeLegs.length)"
       class="route-distance-summary"
       aria-live="polite"
       aria-label="Route distances"
@@ -148,7 +181,7 @@ onBeforeUnmount(() => {
       </ol>
     </section>
     <p v-if="routeNotice" class="route-map-notice">{{ routeNotice }}</p>
-    <small class="route-map-credit">Map tiles © OpenStreetMap contributors · Route service © OSRM</small>
+   <!-- <small class="route-map-credit">Map tiles © OpenStreetMap contributors · Route service © OSRM</small> -->
   </div>
 </template>
 
@@ -262,5 +295,13 @@ onBeforeUnmount(() => {
   gap: 4px;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .route-map {
+    min-height: 220px !important;
+    height: 240px !important;
+    border-radius: 12px !important;
+  }
 }
 </style>
