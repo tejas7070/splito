@@ -47,9 +47,13 @@ const creatingTripLoading = ref(false);
 const createdTripResult = ref<Trip | null>(null);
 
 interface EditableStop {
+  id: string;
   input: string;
   place: PlaceSuggestion | null;
 }
+
+let stopIdCounter = 0;
+const createStopId = () => `stop-${Date.now()}-${++stopIdCounter}`;
 
 const wizardForm = ref({
   title: '',
@@ -125,7 +129,8 @@ const openEditTripWizard = async () => {
       start_place: toPlace(trip.start_point || trip.start_location || '', trip.start_latitude, trip.start_longitude),
       destination: trip.destination,
       destination_place: toPlace(trip.destination, trip.destination_latitude, trip.destination_longitude),
-      stops: (trip.stops || []).map((stop) => ({
+      stops: (trip.stops || []).map((stop, sIdx) => ({
+        id: `saved-stop-${stop.id || sIdx}-${++stopIdCounter}`,
         input: stop.name,
         place: { id: `saved-stop-${stop.id}`, name: stop.name, latitude: stop.latitude, longitude: stop.longitude, nearby: false },
       })),
@@ -148,18 +153,140 @@ const isStep1Valid = computed(() => {
   return Boolean(t.length >= 3 && !hasDisallowedChars(t));
 });
 
+const dateValidationError = computed(() => {
+  if (!wizardForm.value.start_at || !wizardForm.value.end_at) return '';
+  const start = new Date(wizardForm.value.start_at).getTime();
+  const end = new Date(wizardForm.value.end_at).getTime();
+  if (isNaN(start) || isNaN(end)) return '';
+  if (end <= start) {
+    return 'End Date & Time must be strictly after Start Date & Time';
+  }
+  return '';
+});
+
+const tripDurationSummary = computed(() => {
+  if (!wizardForm.value.start_at || !wizardForm.value.end_at) return '';
+  const start = new Date(wizardForm.value.start_at).getTime();
+  const end = new Date(wizardForm.value.end_at).getTime();
+  if (isNaN(start) || isNaN(end) || end <= start) return '';
+
+  const diffMs = end - start;
+  const totalMins = Math.floor(diffMs / (1000 * 60));
+  const days = Math.floor(totalMins / (24 * 60));
+  const hours = Math.floor((totalMins % (24 * 60)) / 60);
+  const mins = totalMins % 60;
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (mins > 0 || parts.length === 0) parts.push(`${mins}m`);
+
+  const startDate = new Date(wizardForm.value.start_at);
+  const endDate = new Date(wizardForm.value.end_at);
+  const start24 = startDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const end24 = endDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  return `Trip Duration: ${parts.join(' ')} (${start24} hrs → ${end24} hrs)`;
+});
+
 const isStep2Valid = computed(() => {
   const f = wizardForm.value;
   const startP = f.start_point?.trim() || '';
   const dest = f.destination?.trim() || '';
+  const startT = f.start_at ? new Date(f.start_at).getTime() : 0;
+  const endT = f.end_at ? new Date(f.end_at).getTime() : 0;
   return Boolean(
     startP.length >= 2 && f.start_place &&
     dest.length >= 2 && f.destination_place &&
     f.stops.every((stop) => stop.place) &&
     f.start_at && f.end_at &&
-    new Date(f.start_at) <= new Date(f.end_at)
+    !isNaN(startT) && !isNaN(endT) && endT > startT
   );
 });
+
+// Drag and drop shuffling for trip stops
+const draggedStopIndex = ref<number | null>(null);
+const dragOverStopIndex = ref<number | null>(null);
+
+const onStopDragStart = (index: number, event: DragEvent) => {
+  draggedStopIndex.value = index;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(index));
+  }
+};
+
+const onStopDragOver = (index: number, event: DragEvent) => {
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move';
+  }
+  dragOverStopIndex.value = index;
+};
+
+const onStopDrop = (index: number) => {
+  if (draggedStopIndex.value !== null && draggedStopIndex.value !== index) {
+    const stops = wizardForm.value.stops;
+    const moved = stops.splice(draggedStopIndex.value, 1)[0];
+    stops.splice(index, 0, moved);
+  }
+  draggedStopIndex.value = null;
+  dragOverStopIndex.value = null;
+};
+
+const onStopDragEnd = () => {
+  draggedStopIndex.value = null;
+  dragOverStopIndex.value = null;
+};
+
+// Touch drag handlers for mobile devices
+const onTouchDragStart = (index: number) => {
+  draggedStopIndex.value = index;
+};
+
+const onTouchDragMove = (event: TouchEvent) => {
+  if (draggedStopIndex.value === null) return;
+  const touch = event.touches[0];
+  const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+  const rowEl = targetEl?.closest('.trip-stop-row');
+  if (rowEl) {
+    const targetIdx = Number(rowEl.getAttribute('data-index'));
+    if (!isNaN(targetIdx) && targetIdx !== dragOverStopIndex.value) {
+      dragOverStopIndex.value = targetIdx;
+    }
+  }
+};
+
+const onTouchDragEnd = () => {
+  if (draggedStopIndex.value !== null && dragOverStopIndex.value !== null && draggedStopIndex.value !== dragOverStopIndex.value) {
+    onStopDrop(dragOverStopIndex.value);
+  }
+  draggedStopIndex.value = null;
+  dragOverStopIndex.value = null;
+};
+
+// Route distance state emitted from RouteMap
+const routeDistanceInfo = ref<{
+  totalDistance: number;
+  legs: Array<{ from: string; to: string; distance: number }>;
+  isLoading: boolean;
+  error: string;
+} | null>(null);
+
+const onRouteCalculated = (info: {
+  totalDistance: number;
+  legs: Array<{ from: string; to: string; distance: number }>;
+  isLoading: boolean;
+  error: string;
+}) => {
+  routeDistanceInfo.value = info;
+};
+
+const formatDistanceKm = (meters: number) => {
+  if (!meters) return '0 km';
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 1 }).format(meters / 1000)} km`;
+};
 
 const isStep3Valid = computed(() => {
   const f = wizardForm.value;
@@ -191,8 +318,8 @@ const nextWizardStep = () => {
         toast.error('Choose a suggested map location for the start, destination, and each stop');
       } else if (!wizardForm.value.start_at || !wizardForm.value.end_at) {
         toast.error('Please choose both start and end dates');
-      } else if (new Date(wizardForm.value.start_at) > new Date(wizardForm.value.end_at)) {
-        toast.error('End date & time must be after the start date');
+      } else if (new Date(wizardForm.value.start_at).getTime() >= new Date(wizardForm.value.end_at).getTime()) {
+        toast.error('End date & time must be strictly after the start date & time');
       }
       return;
     }
@@ -205,19 +332,14 @@ const addTripStop = () => {
     toast.warn('A trip can have at most 20 stops');
     return;
   }
-  wizardForm.value.stops.push({ input: '', place: null });
+  wizardForm.value.stops.push({ id: createStopId(), input: '', place: null });
 };
 
 const removeTripStop = (index: number) => {
   wizardForm.value.stops.splice(index, 1);
 };
 
-const moveTripStop = (index: number, offset: -1 | 1) => {
-  const target = index + offset;
-  if (target < 0 || target >= wizardForm.value.stops.length) return;
-  const stops = wizardForm.value.stops;
-  [stops[index], stops[target]] = [stops[target], stops[index]];
-};
+
 
 const prevWizardStep = () => {
   if (wizardStep.value === 2) wizardStep.value = 1;
@@ -1890,128 +2012,244 @@ onMounted(async () => {
             </div>
 
             <div class="wizard-fields-cluster">
-              <div class="wizard-two-col">
-                <div class="form-control">
-                  <label class="form-label font-bold">
-                    <i class="pi pi-map-marker text-emerald-500 mr-1"></i> Starting Point
-                  </label>
+              <!-- 1. TRAVEL DATES & TIME (TOP) -->
+              <div class="wizard-section-box">
+                <div class="wizard-section-title">
+                  <i class="pi pi-calendar text-[var(--accent)] mr-1"></i> Travel Timing & Duration
+                </div>
+                <div class="wizard-two-col">
+                  <div class="form-control">
+                    <label class="form-label font-bold">
+                      <i class="pi pi-calendar-plus text-emerald-400 mr-1"></i> Start Date & Time
+                    </label>
+                    <InputText 
+                      v-model="wizardForm.start_at" 
+                      type="datetime-local" 
+                      class="wizard-neu-input" 
+                      :class="{ 'input-has-error': dateValidationError }"
+                    />
+                    <span class="input-hint-subtle">When does the journey commence?</span>
+                  </div>
+
+                  <div class="form-control">
+                    <label class="form-label font-bold">
+                      <i class="pi pi-calendar-times text-rose-400 mr-1"></i> End Date & Time
+                    </label>
+                    <InputText 
+                      v-model="wizardForm.end_at" 
+                      type="datetime-local" 
+                      :min="wizardForm.start_at"
+                      class="wizard-neu-input" 
+                      :class="{ 'input-has-error': dateValidationError }"
+                    />
+                    <span class="input-hint-subtle">When do you expect to conclude?</span>
+                  </div>
+                </div>
+
+                <!-- Instant date validation alert -->
+                <div v-if="dateValidationError" class="date-validation-error-banner">
+                  <i class="pi pi-exclamation-triangle"></i>
+                  <span>{{ dateValidationError }}</span>
+                </div>
+                <!-- Live duration & 24h timeline clarification -->
+                <div v-else-if="tripDurationSummary" class="trip-duration-badge">
+                  <i class="pi pi-clock text-[var(--accent)] mr-1.5"></i>
+                  <span>{{ tripDurationSummary }}</span>
+                </div>
+              </div>
+
+              <!-- 2. EXPEDITION ROUTE & STOPS (MIDDLE) -->
+              <div class="wizard-section-box route-expedition-box">
+                <div class="route-section-heading">
+                  <div class="route-section-title">
+                    <i class="pi pi-compass text-[var(--accent)] mr-2"></i> Expedition Route & Halts
+                  </div>
+                  <span class="route-section-subtitle">Define your departure origin, arrange stops in travel sequence, and set destination.</span>
+                </div>
+
+                <!-- Starting Point (Prominent Milestone Card) -->
+                <div class="route-milestone-card start-milestone-card">
+                  <div class="milestone-badge-row">
+                    <span class="milestone-pill start-pill">
+                      <i class="pi pi-map-marker mr-1.5"></i> STARTING POINT
+                    </span>
+                    <span class="milestone-role-hint">Origin / Departure City</span>
+                  </div>
                   <LocationAutocomplete
                     v-model="wizardForm.start_point"
                     ariaLabel="Starting point"
-                    placeholder="Search a city or place"
+                    placeholder="Search departure city, landmark or station"
                     @select="wizardForm.start_place = $event"
                   />
-                  <span class="input-hint-subtle">Choose a suggested place to pin the start on the map.</span>
+                  <div class="milestone-subtext">
+                    <i class="pi pi-check-circle mr-1 text-emerald-400"></i> Select a suggested place to pin the exact GPS departure point.
+                  </div>
                 </div>
 
-                <div class="form-control">
-                  <label class="form-label font-bold">
-                    <i class="pi pi-flag text-rose-500 mr-1"></i> Destination
-                  </label>
+                <!-- Intermediate Stops with Drag & Drop Shuffle -->
+                <div class="trip-stops-editor">
+                  <div class="trip-stops-heading">
+                    <div>
+                      <span class="stops-section-title">
+                        <i class="pi pi-directions text-[var(--accent)] mr-1.5"></i> Intermediate Stops & Halts
+                      </span>
+                      <span class="input-hint-subtle">Drag handle <i class="pi pi-bars text-xs"></i> to shuffle stops in travel order.</span>
+                    </div>
+                    <Button
+                      type="button"
+                      label="Add stop"
+                      icon="pi pi-plus"
+                      size="small"
+                      severity="secondary"
+                      outlined
+                      :disabled="wizardForm.stops.length >= 20"
+                      @click="addTripStop"
+                    />
+                  </div>
+
+                  <div v-if="!wizardForm.stops.length" class="trip-stops-empty-hint">
+                    <i class="pi pi-compass mr-1 text-[var(--accent)]"></i> No intermediate halts added yet. Click <strong>+ Add stop</strong> if you plan to make waypoints.
+                  </div>
+
+                  <div class="trip-stops-list" v-if="wizardForm.stops.length">
+                    <div
+                      v-for="(stop, index) in wizardForm.stops"
+                      :key="stop.id"
+                      :data-index="index"
+                      class="trip-stop-row"
+                      :class="{
+                        'is-dragging': draggedStopIndex === index,
+                        'is-drag-over': dragOverStopIndex === index && draggedStopIndex !== index
+                      }"
+                      draggable="true"
+                      @dragstart="onStopDragStart(index, $event)"
+                      @dragover="onStopDragOver(index, $event)"
+                      @drop="onStopDrop(index)"
+                      @dragend="onStopDragEnd"
+                    >
+                      <!-- Drag handle with mobile touch support -->
+                      <div 
+                        class="trip-stop-drag-handle" 
+                        title="Drag to shuffle stop order"
+                        @touchstart="onTouchDragStart(index)"
+                        @touchmove="onTouchDragMove"
+                        @touchend="onTouchDragEnd"
+                        @touchcancel="onTouchDragEnd"
+                      >
+                        <i class="pi pi-bars"></i>
+                      </div>
+
+                      <!-- Stop Number Badge (Cyan Blue) -->
+                      <span class="trip-stop-order" :title="`Stop ${index + 1}`">
+                        {{ index + 1 }}
+                      </span>
+
+                      <!-- Location Search -->
+                      <div class="trip-stop-input-wrap">
+                        <LocationAutocomplete
+                          v-model="stop.input"
+                          :ariaLabel="`Stop ${index + 1}`"
+                          placeholder="Search waypoint or halt"
+                          @select="stop.place = $event"
+                        />
+                      </div>
+
+                      <!-- Delete control -->
+                      <div class="trip-stop-actions">
+                        <Button
+                          type="button"
+                          icon="pi pi-trash"
+                          severity="danger"
+                          text
+                          rounded
+                          class="trip-stop-delete-btn"
+                          :aria-label="`Remove stop ${index + 1}`"
+                          @click="removeTripStop(index)"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Destination (Prominent Milestone Card) -->
+                <div class="route-milestone-card destination-milestone-card">
+                  <div class="milestone-badge-row">
+                    <span class="milestone-pill dest-pill">
+                      <i class="pi pi-flag mr-1.5"></i> FINAL DESTINATION
+                    </span>
+                    <span class="milestone-role-hint">Arrival / Concluding City</span>
+                  </div>
                   <LocationAutocomplete
                     v-model="wizardForm.destination"
                     ariaLabel="Destination"
-                    placeholder="Search a city or place"
+                    placeholder="Search arrival city or final landmark"
                     @select="wizardForm.destination_place = $event"
                   />
-                  <span class="input-hint-subtle">Search by name or choose a nearby place.</span>
-                </div>
-              </div>
-
-              <div class="trip-stops-editor">
-                <div class="trip-stops-heading">
-                  <div>
-                    <span class="form-label font-bold">Stops and halts</span>
-                    <span class="input-hint-subtle">Add the places you plan to stop at, in travel order.</span>
-                  </div>
-                  <Button
-                    type="button"
-                    label="Add stop"
-                    icon="pi pi-plus"
-                    size="small"
-                    severity="secondary"
-                    outlined
-                    :disabled="wizardForm.stops.length >= 20"
-                    @click="addTripStop"
-                  />
-                </div>
-                <div v-for="(stop, index) in wizardForm.stops" :key="index" class="trip-stop-row">
-                  <span class="trip-stop-order">{{ index + 1 }}</span>
-                  <LocationAutocomplete
-                    v-model="stop.input"
-                    :ariaLabel="`Stop ${index + 1}`"
-                    placeholder="Search a stop or halt"
-                    @select="stop.place = $event"
-                  />
-                  <div class="trip-stop-controls">
-                    <Button
-                      type="button"
-                      icon="pi pi-arrow-up"
-                      severity="secondary"
-                      text
-                      rounded
-                      :disabled="index === 0"
-                      :aria-label="`Move stop ${index + 1} up`"
-                      @click="moveTripStop(index, -1)"
-                    />
-                    <Button
-                      type="button"
-                      icon="pi pi-arrow-down"
-                      severity="secondary"
-                      text
-                      rounded
-                      :disabled="index === wizardForm.stops.length - 1"
-                      :aria-label="`Move stop ${index + 1} down`"
-                      @click="moveTripStop(index, 1)"
-                    />
-                    <Button
-                      type="button"
-                      icon="pi pi-times"
-                      severity="danger"
-                      text
-                      rounded
-                      :aria-label="`Remove stop ${index + 1}`"
-                      @click="removeTripStop(index)"
-                    />
+                  <div class="milestone-subtext">
+                    <i class="pi pi-check-circle mr-1 text-rose-400"></i> Select a suggested place to pin the destination on the map.
                   </div>
                 </div>
               </div>
 
-              <div class="wizard-two-col" style="margin-top: 18px;">
-                <div class="form-control">
-                  <label class="form-label font-bold">
-                    <i class="pi pi-calendar mr-1 text-[var(--accent)]"></i> Start Date & Time
-                  </label>
-                  <InputText 
-                    v-model="wizardForm.start_at" 
-                    type="datetime-local" 
-                    class="wizard-neu-input" 
-                  />
+              <!-- 3. TOTAL TRAVELLING DISTANCE (EXACTLY BELOW LOCATION STOPS) -->
+              <div v-if="routeMapPoints.length >= 2" class="total-distance-card">
+                <div class="total-distance-header">
+                  <div class="total-distance-badge-wrap">
+                    <div class="total-distance-icon-glow">
+                      <i class="pi pi-car"></i>
+                    </div>
+                    <div>
+                      <div class="total-distance-label">TOTAL TRAVELLING DISTANCE</div>
+                      <div class="total-distance-value" v-if="!routeDistanceInfo?.isLoading && routeDistanceInfo?.totalDistance">
+                        {{ formatDistanceKm(routeDistanceInfo.totalDistance) }}
+                      </div>
+                      <div class="total-distance-loading" v-else-if="routeDistanceInfo?.isLoading">
+                        <i class="pi pi-spin pi-spinner mr-1 text-[var(--accent)]"></i> Calculating driving route distance…
+                      </div>
+                      <div class="total-distance-direct" v-else-if="routeDistanceInfo?.error">
+                        <i class="pi pi-info-circle mr-1"></i> Direct-line preview (road routing unavailable)
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-if="routeDistanceInfo?.legs?.length" class="legs-count-pill">
+                    <i class="pi pi-map mr-1"></i> {{ routeDistanceInfo.legs.length }} {{ routeDistanceInfo.legs.length === 1 ? 'Leg' : 'Legs' }}
+                  </div>
                 </div>
 
-                <div class="form-control">
-                  <label class="form-label font-bold">
-                    <i class="pi pi-calendar-times mr-1 text-[var(--accent)]"></i> End Date & Time
-                  </label>
-                  <InputText 
-                    v-model="wizardForm.end_at" 
-                    type="datetime-local" 
-                    class="wizard-neu-input" 
-                  />
+                <!-- Distance Legs Breakdown -->
+                <div v-if="routeDistanceInfo?.legs?.length" class="total-distance-legs-list">
+                  <div v-for="(leg, idx) in routeDistanceInfo.legs" :key="idx" class="distance-leg-item">
+                    <div class="leg-left">
+                      <span class="leg-index">{{ idx + 1 }}</span>
+                      <span class="leg-names">
+                        <strong>{{ leg.from }}</strong>
+                        <i class="pi pi-arrow-right leg-arrow"></i>
+                        <strong>{{ leg.to }}</strong>
+                      </span>
+                    </div>
+                    <span class="leg-km">{{ formatDistanceKm(leg.distance) }}</span>
+                  </div>
                 </div>
               </div>
 
+              <!-- 4. LIVE ROUTE MAP (EKDUM BELOW) -->
               <div class="route-map-preview">
                 <div class="route-map-preview-heading">
                   <div>
-                    <span class="form-label font-bold">Route preview</span>
-                    <span class="input-hint-subtle">Driving route with your selected stops.</span>
+                    <span class="form-label font-bold">Interactive Route Map</span>
+                    <span class="input-hint-subtle">Driving route with your selected waypoints & stops.</span>
                   </div>
-                  <span class="route-distance-note">Nearby place suggestions cover 20 km.</span>
+                  <span class="route-distance-note">OpenStreetMap + OSRM Driving Engine</span>
                 </div>
-                <RouteMap v-if="routeMapPoints.length >= 2" :points="routeMapPoints" />
+                <RouteMap 
+                  v-if="routeMapPoints.length >= 2" 
+                  :points="routeMapPoints" 
+                  :hide-distance-summary="true"
+                  @route-calculated="onRouteCalculated"
+                />
                 <p v-else class="route-map-empty">
-                  Choose a suggested start, destination, and all added stops to preview the route.
+                  Choose a suggested start, destination, and all added stops to preview the route and calculate distance.
                 </p>
               </div>
             </div>
@@ -4966,13 +5204,43 @@ html.dark .popover-menu-btn:hover {
   }
 
   .wizard-stepper {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 6px 10px !important;
+    gap: 4px !important;
+    border-radius: 12px !important;
+  }
+
+  .stepper-node {
+    padding: 4px 6px !important;
+    gap: 6px !important;
+    flex: 1 !important;
+    justify-content: center !important;
+  }
+
+  .node-circle {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    font-size: 11px !important;
+  }
+
+  .node-step-label {
+    display: none !important;
+  }
+
+  .node-title {
+    font-size: 11px !important;
+    white-space: nowrap !important;
   }
 
   .stepper-connector {
-    display: none;
+    display: block !important;
+    flex: 1 !important;
+    height: 1px !important;
+    min-width: 6px !important;
+    background: rgba(255, 255, 255, 0.08) !important;
   }
 
   .wizard-two-col {
@@ -7614,11 +7882,429 @@ html.dark .neu-table td {
   gap: 2px;
 }
 
-.trip-stop-row {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) 92px;
+.wizard-section-box {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.05));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wizard-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  display: flex;
+  align-items: center;
+}
+
+.date-validation-error-banner {
+  display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  font-size: 12px;
+  font-weight: 600;
+  animation: fadeIn 0.2s ease;
+}
+
+.trip-duration-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: var(--accent, #38bdf8);
+  font-size: 12px;
+  font-weight: 600;
+  animation: fadeIn 0.2s ease;
+}
+
+.input-has-error {
+  border-color: #ef4444 !important;
+  box-shadow: var(--shadow-inset), 0 0 0 1px #ef4444 !important;
+}
+
+.trip-stops-empty-hint {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--border-subtle, rgba(255, 255, 255, 0.1));
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.trip-stops-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.trip-stop-row {
+  display: grid;
+  grid-template-columns: 32px 32px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.trip-stop-row:hover {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(56, 189, 248, 0.3);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
+}
+
+.trip-stop-row.is-dragging {
+  opacity: 0.45;
+  border-style: dashed;
+  border-color: var(--accent);
+  transform: scale(0.98);
+  background: rgba(56, 189, 248, 0.05);
+}
+
+.trip-stop-row.is-drag-over {
+  border-color: var(--accent);
+  background: rgba(56, 189, 248, 0.1);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.trip-stop-drag-handle {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  cursor: grab;
+  font-size: 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.trip-stop-drag-handle:hover {
+  color: var(--accent);
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.trip-stop-drag-handle:active {
+  cursor: grabbing;
+}
+
+.trip-stop-order {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: var(--accent, #38bdf8);
+  font-size: 13px;
+  font-weight: 800;
+  user-select: none;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.12);
+}
+
+.route-expedition-box {
+  padding: 22px !important;
+  border-radius: 18px !important;
+  gap: 18px !important;
+}
+
+.route-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.07));
+}
+
+.route-section-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  display: flex;
+  align-items: center;
+}
+
+.route-section-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.route-milestone-card {
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.route-milestone-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+}
+
+.start-milestone-card {
+  border-left: 3px solid #10b981;
+}
+
+.destination-milestone-card {
+  border-left: 3px solid #f43f5e;
+}
+
+.milestone-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.milestone-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  text-transform: uppercase;
+}
+
+.start-pill {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.dest-pill {
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.milestone-role-hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.milestone-subtext {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.stops-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+}
+
+.trip-stops-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px dashed rgba(255, 255, 255, 0.09);
+  margin: 4px 0;
+}
+
+.trip-stop-input-wrap {
+  min-width: 0;
+  width: 100%;
+}
+
+.trip-stop-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trip-stop-delete-btn {
+  width: 34px !important;
+  height: 34px !important;
+  color: var(--text-muted) !important;
+  border-radius: 10px !important;
+  transition: all 0.15s ease !important;
+}
+
+.trip-stop-delete-btn:hover {
+  color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.15) !important;
+}
+
+.total-distance-card {
+  margin-top: 12px;
+  padding: 16px 20px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  box-shadow: var(--shadow-flat-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.total-distance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.total-distance-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.total-distance-icon-glow {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.14);
+  color: var(--accent, #38bdf8);
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.15);
+}
+
+.total-distance-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+
+.total-distance-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.total-distance-loading,
+.total-distance-direct {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.legs-count-pill {
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.total-distance-legs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+.distance-leg-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  gap: 8px;
+}
+
+.leg-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.leg-index {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.leg-names {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leg-names strong {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.leg-arrow {
+  font-size: 10px;
+  color: var(--accent);
+}
+
+.leg-km {
+  font-weight: 700;
+  color: var(--accent, #38bdf8);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .trip-stop-controls {
@@ -7627,18 +8313,7 @@ html.dark .neu-table td {
   gap: 0;
 }
 
-.trip-stop-order {
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--surface);
-  box-shadow: var(--shadow-inset);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
+
 
 .route-map-preview {
   padding-top: 14px;
@@ -7676,6 +8351,361 @@ html.dark .neu-table td {
 
   .route-distance-note {
     text-align: right;
+  }
+}
+
+/* ==========================================================================
+   Comprehensive Mobile & Tablet Responsive Optimizations (Trip Wizard & Dashboard)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .app-content-layout {
+    padding: 12px 10px !important;
+    gap: 12px !important;
+  }
+
+  .wizard-split-layout {
+    grid-template-columns: 1fr !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .wizard-surface-card {
+    padding: 18px 14px !important;
+    border-radius: 16px !important;
+    gap: 16px !important;
+  }
+
+  .wizard-section-box {
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+    gap: 12px !important;
+  }
+
+  .route-expedition-box {
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+    gap: 14px !important;
+  }
+
+  .route-section-heading {
+    padding-bottom: 10px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .route-section-title {
+    font-size: 13px !important;
+    letter-spacing: 0.6px !important;
+  }
+
+  .route-section-subtitle {
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+  }
+
+  .route-milestone-card {
+    padding: 12px 12px !important;
+    border-radius: 12px !important;
+    gap: 8px !important;
+  }
+
+  .milestone-badge-row {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .milestone-pill {
+    font-size: 10px !important;
+    padding: 3px 8px !important;
+  }
+
+  .milestone-role-hint {
+    font-size: 11px !important;
+  }
+
+  .milestone-subtext {
+    font-size: 10px !important;
+    line-height: 1.35 !important;
+  }
+
+  .trip-stops-editor {
+    padding: 12px 10px !important;
+    border-radius: 12px !important;
+    gap: 10px !important;
+    margin: 2px 0 !important;
+  }
+
+  .trip-stops-heading {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+
+  .stops-section-title {
+    font-size: 12px !important;
+  }
+
+  .trip-stops-list {
+    gap: 8px !important;
+  }
+
+  .trip-stop-row {
+    grid-template-columns: 28px 26px minmax(0, 1fr) 30px !important;
+    gap: 8px !important;
+    padding: 8px 10px !important;
+    border-radius: 12px !important;
+  }
+
+  .trip-stop-drag-handle {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+    touch-action: none !important;
+  }
+
+  .trip-stop-order {
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    font-size: 11px !important;
+    border-radius: 8px !important;
+  }
+
+  .trip-stop-delete-btn {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+  }
+
+  .total-distance-card {
+    padding: 12px 14px !important;
+    border-radius: 14px !important;
+    gap: 10px !important;
+  }
+
+  .total-distance-header {
+    gap: 8px !important;
+  }
+
+  .total-distance-badge-wrap {
+    gap: 10px !important;
+  }
+
+  .total-distance-icon-glow {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 16px !important;
+    border-radius: 10px !important;
+  }
+
+  .total-distance-label {
+    font-size: 10px !important;
+  }
+
+  .total-distance-value {
+    font-size: 20px !important;
+  }
+
+  .total-distance-legs-list {
+    gap: 8px !important;
+  }
+
+  .distance-leg-item {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+    padding: 8px 10px !important;
+    border-radius: 8px !important;
+  }
+
+  .leg-left {
+    width: 100% !important;
+    align-items: flex-start !important;
+  }
+
+  .leg-names {
+    flex-wrap: wrap !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+  }
+
+  .leg-km {
+    align-self: flex-end !important;
+    font-size: 12px !important;
+  }
+
+  .wizard-two-col {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .wizard-two-col input[type="datetime-local"] {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-height: 42px !important;
+    font-size: 13px !important;
+    padding: 9px 12px !important;
+  }
+
+  .wizard-actions-bar {
+    flex-direction: column-reverse !important;
+    gap: 10px !important;
+    padding-top: 14px !important;
+    margin-top: 6px !important;
+  }
+
+  .wizard-actions-bar button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  .btn-wizard-next,
+  .btn-wizard-launch {
+    min-height: 46px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+  }
+
+  .btn-wizard-back-small {
+    min-height: 38px !important;
+  }
+
+  .summary-details-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .summary-col {
+    padding: 8px 10px !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border-radius: 8px !important;
+  }
+
+  .summary-val {
+    word-break: break-word !important;
+  }
+}
+
+/* Extra Compact Mobile Screens (<= 480px, e.g. iPhone SE, Fold) */
+@media (max-width: 480px) {
+  .app-content-layout {
+    padding: 8px 6px !important;
+    gap: 8px !important;
+  }
+
+  .wizard-surface-card {
+    padding: 12px 10px !important;
+    border-radius: 14px !important;
+    gap: 12px !important;
+  }
+
+  .wizard-stepper {
+    padding: 5px 6px !important;
+    gap: 2px !important;
+  }
+
+  .stepper-node {
+    padding: 4px 4px !important;
+    gap: 4px !important;
+  }
+
+  .stepper-node:not(.node-active) .node-title {
+    display: none !important;
+  }
+
+  .stepper-node.node-active {
+    flex: 2 !important;
+    background: rgba(56, 189, 248, 0.08) !important;
+    border-radius: 8px !important;
+  }
+
+  .stepper-node.node-active .node-title {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+  }
+
+  .node-circle {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    font-size: 10px !important;
+  }
+
+  .step-intro {
+    gap: 10px !important;
+  }
+
+  .step-icon-badge {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    font-size: 15px !important;
+  }
+
+  .step-heading {
+    font-size: 16px !important;
+    line-height: 1.25 !important;
+  }
+
+  .step-subheading {
+    font-size: 11px !important;
+  }
+
+  .wizard-section-box {
+    padding: 10px 8px !important;
+    border-radius: 12px !important;
+    gap: 10px !important;
+  }
+
+  .route-expedition-box {
+    padding: 10px 8px !important;
+    border-radius: 12px !important;
+    gap: 10px !important;
+  }
+
+  .route-milestone-card {
+    padding: 10px 8px !important;
+    border-radius: 10px !important;
+    gap: 6px !important;
+  }
+
+  .trip-stops-editor {
+    padding: 8px 6px !important;
+    border-radius: 10px !important;
+    gap: 8px !important;
+  }
+
+  .trip-stop-row {
+    grid-template-columns: 24px 22px minmax(0, 1fr) 28px !important;
+    gap: 6px !important;
+    padding: 6px 8px !important;
+    border-radius: 10px !important;
+  }
+
+  .trip-stop-drag-handle {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 11px !important;
+    border-radius: 6px !important;
+  }
+
+  .trip-stop-order {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    font-size: 10px !important;
+    border-radius: 6px !important;
+  }
+
+  .trip-stop-delete-btn {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+    border-radius: 6px !important;
   }
 }
 </style>
