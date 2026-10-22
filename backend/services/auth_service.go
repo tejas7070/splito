@@ -267,12 +267,59 @@ func (s *AuthService) dispatchOTPEmail(toEmail, code, subject, title, badge, des
 			"Subject: %s\r\n"+
 			"Content-Type: text/html; charset=UTF-8\r\n\r\n", from, toEmail, subject)
 
-		// 1. Try Resend HTTP API (Port 443 - 100% unblocked on Render Free tier)
-		if s.cfg.ResendAPIKey != "" {
+		// 1. Try Brevo HTTP API (Port 443 - 100% unblocked on Render Free tier, sends to ANY recipient without custom domain)
+		cleanBrevoKey := strings.TrimSpace(s.cfg.BrevoAPIKey)
+		if cleanBrevoKey != "" {
+			brevoSender := strings.TrimSpace(s.cfg.SMTPFrom)
+			if brevoSender == "" || strings.Contains(brevoSender, "resend.dev") {
+				brevoSender = strings.TrimSpace(s.cfg.SMTPUser)
+			}
+			if brevoSender == "" {
+				brevoSender = "tejasulawekar@gmail.com"
+			}
+
+			brevoPayload := map[string]interface{}{
+				"sender": map[string]string{
+					"name":  "Splito",
+					"email": brevoSender,
+				},
+				"to": []map[string]string{
+					{"email": toEmail},
+				},
+				"subject":     subject,
+				"htmlContent": htmlContent,
+			}
+			jsonBytes, err := json.Marshal(brevoPayload)
+			if err == nil {
+				req, err := http.NewRequest("POST", "https://api.brevo.com/v3/smtp/email", bytes.NewBuffer(jsonBytes))
+				if err == nil {
+					req.Header.Set("accept", "application/json")
+					req.Header.Set("api-key", cleanBrevoKey)
+					req.Header.Set("Content-Type", "application/json")
+					client := &http.Client{Timeout: 10 * time.Second}
+					resp, err := client.Do(req)
+					if err == nil {
+						bodyBytes, _ := io.ReadAll(resp.Body)
+						resp.Body.Close()
+						if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+							fmt.Printf("[SPLITO EMAIL SUCCESS] Dispatched OTP to %s via Brevo API\n", toEmail)
+							return
+						}
+						fmt.Printf("[SPLITO BREVO ERROR] HTTP %d: %s\n", resp.StatusCode, string(bodyBytes))
+					} else {
+						fmt.Printf("[SPLITO BREVO ERROR] %v\n", err)
+					}
+				}
+			}
+		}
+
+		// 2. Try Resend HTTP API (Port 443 - free sandbox delivers strictly to account owner)
+		cleanResendKey := strings.TrimSpace(s.cfg.ResendAPIKey)
+		if cleanResendKey != "" {
 			// Resend requires onboarding@resend.dev unless a custom verified domain is used (never accepts @gmail.com)
 			sender := "Splito <onboarding@resend.dev>"
 			cleanFrom := strings.ToLower(strings.TrimSpace(s.cfg.SMTPFrom))
-			if cleanFrom != "" && strings.Contains(cleanFrom, "@") && !strings.HasSuffix(cleanFrom, "@gmail.com") && !strings.HasSuffix(cleanFrom, "@yahoo.com") {
+			if cleanFrom != "" && strings.Contains(cleanFrom, "@") && !strings.HasSuffix(cleanFrom, "@gmail.com") && !strings.HasSuffix(cleanFrom, "@yahoo.com") && !strings.Contains(cleanFrom, "resend.dev") {
 				sender = s.cfg.SMTPFrom
 			}
 			resendPayload := map[string]interface{}{
@@ -285,7 +332,7 @@ func (s *AuthService) dispatchOTPEmail(toEmail, code, subject, title, badge, des
 			if err == nil {
 				req, err := http.NewRequest("POST", "https://api.resend.com/emails", bytes.NewBuffer(jsonBytes))
 				if err == nil {
-					req.Header.Set("Authorization", "Bearer "+s.cfg.ResendAPIKey)
+					req.Header.Set("Authorization", "Bearer "+cleanResendKey)
 					req.Header.Set("Content-Type", "application/json")
 					client := &http.Client{Timeout: 10 * time.Second}
 					resp, err := client.Do(req)
@@ -299,41 +346,6 @@ func (s *AuthService) dispatchOTPEmail(toEmail, code, subject, title, badge, des
 						fmt.Printf("[SPLITO RESEND ERROR] HTTP %d: %s\n", resp.StatusCode, string(bodyBytes))
 					} else {
 						fmt.Printf("[SPLITO RESEND ERROR] %v\n", err)
-					}
-				}
-			}
-		}
-
-		// 2. Try Brevo HTTP API (Port 443 - 100% unblocked on Render Free tier)
-		if s.cfg.BrevoAPIKey != "" {
-			brevoPayload := map[string]interface{}{
-				"sender": map[string]string{
-					"name":  "Splito",
-					"email": from,
-				},
-				"to": []map[string]string{
-					{"email": toEmail},
-				},
-				"subject":     subject,
-				"htmlContent": htmlContent,
-			}
-			jsonBytes, err := json.Marshal(brevoPayload)
-			if err == nil {
-				req, err := http.NewRequest("POST", "https://api.brevo.com/v3/smtp/email", bytes.NewBuffer(jsonBytes))
-				if err == nil {
-					req.Header.Set("api-key", s.cfg.BrevoAPIKey)
-					req.Header.Set("Content-Type", "application/json")
-					client := &http.Client{Timeout: 10 * time.Second}
-					resp, err := client.Do(req)
-					if err == nil {
-						resp.Body.Close()
-						if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-							fmt.Printf("[SPLITO EMAIL SUCCESS] Dispatched OTP to %s via Brevo API\n", toEmail)
-							return
-						}
-						fmt.Printf("[SPLITO BREVO ERROR] HTTP %d\n", resp.StatusCode)
-					} else {
-						fmt.Printf("[SPLITO BREVO ERROR] %v\n", err)
 					}
 				}
 			}
