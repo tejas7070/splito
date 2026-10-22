@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/smtp"
 	"strings"
 	"time"
 
@@ -477,20 +476,6 @@ func (s *LedgerService) sendClaimDecisionEmail(
 			explanationHtml,
 		)
 
-		from := s.cfg.SMTPFrom
-		if from == "" {
-			from = s.cfg.SMTPUser
-		}
-
-		auth := smtp.PlainAuth("", s.cfg.SMTPUser, s.cfg.SMTPPass, s.cfg.SMTPHost)
-		addr := fmt.Sprintf("%s:%s", s.cfg.SMTPHost, s.cfg.SMTPPort)
-
-		msg := []byte(fmt.Sprintf("To: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s", claimantEmail, subject, htmlContent))
-
-		if err := smtp.SendMail(addr, auth, from, []string{claimantEmail}, msg); err != nil {
-			fmt.Printf("[SPLITO CLAIM EMAIL ERROR] Failed to send decision email to %s: %v\n", claimantEmail, err)
-		} else {
-			fmt.Printf("[SPLITO CLAIM EMAIL SUCCESS] Successfully sent %s email to %s for claim '%s' (₹%.2f)\n", badgeText, claimantEmail, claimTitle, claim.Amount)
-		}
+		DispatchEmail(s.cfg, claimantEmail, subject, htmlContent, fmt.Sprintf("SPLITO CLAIM %s", badgeText))
 	}()
 }
