@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net/smtp"
 	"strings"
 	"time"
 
@@ -303,28 +302,22 @@ func (s *TripService) InviteMember(ctx context.Context, inviterID int64, req *ty
 		}
 	}
 
-	// 5. Send Invitation Email via SMTP
-	if s.cfg.SMTPHost != "" && s.cfg.SMTPUser != "" {
-		go func(toEmail, tripTitle, startLoc, dest, invToken string, tripID int64, assignedRole models.Role) {
-			from := s.cfg.SMTPFrom
-			if from == "" {
-				from = s.cfg.SMTPUser
-			}
+	// 5. Send Invitation Email via Email Service (Brevo / Resend / SMTP)
+	roleTitle := "Participant"
+	if role == models.RoleCoReviewer {
+		roleTitle = "Co-Reviewer (Auditor)"
+	} else if role == models.RoleMunimji {
+		roleTitle = "Munimji"
+	}
 
-			auth := smtp.PlainAuth("", s.cfg.SMTPUser, s.cfg.SMTPPass, s.cfg.SMTPHost)
-			addr := fmt.Sprintf("%s:%s", s.cfg.SMTPHost, s.cfg.SMTPPort)
+	appBaseURL := "https://splito-alpha.vercel.app"
+	if s.cfg.AppEnv == "development" {
+		appBaseURL = "http://localhost:5173"
+	}
+	inviteURL := fmt.Sprintf("%s/?invite_trip=%d&invite_token=%s", appBaseURL, req.TripID, token)
+	subject := fmt.Sprintf("You're invited to join trip \"%s\" as %s on Splito", trip.Name, roleTitle)
 
-			roleTitle := "Participant"
-			if assignedRole == models.RoleCoReviewer {
-				roleTitle = "Co-Reviewer (Auditor)"
-			} else if assignedRole == models.RoleMunimji {
-				roleTitle = "Munimji"
-			}
-
-			inviteURL := fmt.Sprintf("http://localhost:8080/?invite_trip=%d&invite_token=%s", tripID, invToken)
-			subject := fmt.Sprintf("You're invited to join trip \"%s\" as %s on Splito", tripTitle, roleTitle)
-
-			htmlContent := fmt.Sprintf(`<!DOCTYPE html>
+	htmlContent := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -389,24 +382,9 @@ func (s *TripService) InviteMember(ctx context.Context, inviterID int64, req *ty
     </tr>
   </table>
 </body>
-</html>`, tripTitle, roleTitle, tripTitle, startLoc, dest, roleTitle, inviteURL)
+</html>`, trip.Name, roleTitle, trip.Name, trip.StartLocation, trip.Destination, roleTitle, inviteURL)
 
-			headers := fmt.Sprintf("MIME-Version: 1.0\r\n"+
-				"From: Splito <%s>\r\n"+
-				"To: %s\r\n"+
-				"Subject: %s\r\n"+
-				"Content-Type: text/html; charset=UTF-8\r\n\r\n", from, toEmail, subject)
-
-			msg := []byte(headers + htmlContent)
-
-			err := smtp.SendMail(addr, auth, from, []string{toEmail}, msg)
-			if err != nil {
-				fmt.Printf("[SPLITO INVITATION SMTP ERROR] Failed to send email to %s: %v\n", toEmail, err)
-			} else {
-				fmt.Printf("[SPLITO INVITATION SMTP SUCCESS] Trip invitation sent to %s (Role: %s)\n", toEmail, roleTitle)
-			}
-		}(req.Email, trip.Name, trip.StartLocation, trip.Destination, token, req.TripID, role)
-	}
+	DispatchEmail(s.cfg, req.Email, subject, htmlContent, "SPLITO INVITATION")
 
 	return nil
 }
@@ -769,20 +747,11 @@ func (s *TripService) RemoveMember(ctx context.Context, munimjiID int64, req mod
 	// 5. Also completely delete any invitation records for this email on this trip
 	_ = s.tripWriter.DeleteInvitationForEmail(ctx, req.TripID, targetEmail)
 
-	// 6. Send notification email via SMTP
-	if s.cfg.SMTPHost != "" && s.cfg.SMTPUser != "" && targetEmail != "" {
-		go func(toEmail, memberName, tripTitle, mName, remReason string) {
-			from := s.cfg.SMTPFrom
-			if from == "" {
-				from = s.cfg.SMTPUser
-			}
+	// 6. Send notification email via Email Service (Brevo / Resend / SMTP)
+	if targetEmail != "" {
+		subject := fmt.Sprintf("Notice: You have been removed from trip \"%s\"", trip.Title)
 
-			auth := smtp.PlainAuth("", s.cfg.SMTPUser, s.cfg.SMTPPass, s.cfg.SMTPHost)
-			addr := fmt.Sprintf("%s:%s", s.cfg.SMTPHost, s.cfg.SMTPPort)
-
-			subject := fmt.Sprintf("Notice: You have been removed from trip \"%s\"", tripTitle)
-
-			htmlContent := fmt.Sprintf(`<!DOCTYPE html>
+		htmlContent := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -845,16 +814,9 @@ func (s *TripService) RemoveMember(ctx context.Context, munimjiID int64, req mod
     </tr>
   </table>
 </body>
-</html>`, memberName, mName, tripTitle, remReason)
+</html>`, targetName, munimjiName, trip.Title, reason)
 
-			msg := []byte(fmt.Sprintf("To: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s", toEmail, subject, htmlContent))
-
-			if err := smtp.SendMail(addr, auth, from, []string{toEmail}, msg); err != nil {
-				fmt.Printf("Failed to send removal email to %s: %v\n", toEmail, err)
-			} else {
-				fmt.Printf("Successfully sent removal notification email to %s for trip %s\n", toEmail, tripTitle)
-			}
-		}(targetEmail, targetName, trip.Title, munimjiName, reason)
+		DispatchEmail(s.cfg, targetEmail, subject, htmlContent, "SPLITO MEMBER REMOVED")
 	}
 
 	return nil
