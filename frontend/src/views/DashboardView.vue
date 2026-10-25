@@ -7608,25 +7608,68 @@ html.dark .neu-table td {
   }
 
   .trip-hero-section {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 20px 18px;
-    gap: 16px;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 18px 16px !important;
+    gap: 14px !important;
+  }
+
+  .hero-left {
+    flex: none !important;
+    width: 100% !important;
+    min-width: 0 !important;
   }
 
   .hero-right {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 10px;
-    width: 100%;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    width: 100% !important;
+    margin: 0 !important;
   }
 
-  .status-control-box,
+  .hero-actions-cluster {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .status-control-box {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+
+  .status-select-component {
+    width: 100% !important;
+    min-width: unset !important;
+    height: 38px !important;
+  }
+
+  .btn-edit-expedition,
+  .btn-delete-expedition {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    justify-content: center !important;
+    height: 36px !important;
+    font-size: 11px !important;
+    padding: 0 8px !important;
+    white-space: nowrap !important;
+  }
+
   .treasurer-chip {
-    flex: 1;
-    min-width: 150px;
-    align-items: flex-start;
+    width: 100% !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 8px 14px !important;
+    border-radius: 12px !important;
+  }
+
+  .treasurer-chip .chip-name {
+    margin-top: 0 !important;
   }
 }
 
@@ -7705,13 +7748,35 @@ html.dark .neu-table td {
     line-height: 1.1;
   }
 
+  .trip-hero-section {
+    padding: 16px 14px !important;
+    gap: 12px !important;
+    border-radius: 16px !important;
+  }
+
+  .hero-left {
+    flex: none !important;
+    width: 100% !important;
+  }
+
   .hero-title {
-    font-size: 22px;
+    font-size: 20px !important;
+    margin: 2px 0 6px 0 !important;
   }
 
   .hero-route-line {
-    flex-wrap: wrap;
-    gap: 6px;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    font-size: 11px !important;
+  }
+
+  .route-node {
+    max-width: 140px !important;
+    padding: 2px 8px !important;
+    font-size: 11px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 
   .claim-neu-card {
@@ -7783,13 +7848,28 @@ html.dark .neu-table td {
 /* 4. Standard Mobile Phones (<= 600px) */
 @media (max-width: 600px) {
   .metrics-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
   }
 
   .metric-card {
-    padding: 16px;
-    border-radius: 14px;
+    padding: 12px 10px !important;
+    border-radius: 12px !important;
+  }
+
+  .metric-heading {
+    font-size: 9px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .metric-number {
+    font-size: 18px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .metric-sub {
+    font-size: 9px !important;
+    line-height: 1.2 !important;
   }
 
   .metric-number {
