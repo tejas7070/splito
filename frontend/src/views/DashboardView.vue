@@ -63,7 +63,7 @@ const wizardForm = ref({
   stops: [] as EditableStop[],
   start_at: '',
   end_at: '',
-  estimated_budget: 50000 as number | null,
+  estimated_budget: null as number | null,
 });
 
 const wizardHeading = computed(() => editingTripId.value ? 'Edit Trip Route' : 'Plan New Trip');
@@ -88,7 +88,7 @@ const openCreateTripWizard = () => {
     stops: [],
     start_at: '',
     end_at: '',
-    estimated_budget: 50000,
+    estimated_budget: null,
   };
   wizardStep.value = 1;
   createdTripResult.value = null;
@@ -135,7 +135,7 @@ const openEditTripWizard = async () => {
       })),
       start_at: toLocalDateTime(trip.start_at),
       end_at: toLocalDateTime(trip.end_at),
-      estimated_budget: trip.estimated_budget ?? 0,
+      estimated_budget: trip.estimated_budget && trip.estimated_budget > 0 ? trip.estimated_budget : null,
     };
     wizardStep.value = 1;
     createdTripResult.value = null;
@@ -1860,7 +1860,7 @@ onMounted(async () => {
               <div class="pass-meta-item">
                 <span class="meta-field-label">TRIP BUDGET</span>
                 <span class="meta-field-val font-bold text-emerald-400">
-                  {{ formatINR((wizardForm.estimated_budget || 0) * 100) }}
+                  {{ wizardForm.estimated_budget ? formatINR((wizardForm.estimated_budget || 0) * 100) : '—' }}
                 </span>
               </div>
               <div class="pass-meta-item">
@@ -2354,7 +2354,7 @@ onMounted(async () => {
                   <div class="summary-col">
                     <span class="summary-dim">ESTIMATED BUDGET</span>
                     <span class="summary-val font-bold text-emerald-400">
-                      {{ formatINR((wizardForm.estimated_budget || 0) * 100) }}
+                      {{ wizardForm.estimated_budget ? formatINR((wizardForm.estimated_budget || 0) * 100) : '—' }}
                     </span>
                   </div>
                 </div>
@@ -2457,11 +2457,12 @@ onMounted(async () => {
           </div>
 
           <div class="hero-right">
-            <!-- Expedition Status & Actions Bar -->
-            <div class="hero-actions-cluster">
-              <div class="status-control-box" v-if="isMunimji">
-                <span class="chip-role">EXPEDITION STATUS</span>
+            <!-- Status & Role Meta Deck -->
+            <div class="hero-meta-deck">
+              <div class="hero-meta-item">
+                <span class="hero-meta-label">EXPEDITION STATUS</span>
                 <Select
+                  v-if="isMunimji"
                   :modelValue="selectedTrip.status"
                   @update:modelValue="handleUpdateTripStatus($event)"
                   :options="statusOptions"
@@ -2483,43 +2484,49 @@ onMounted(async () => {
                     </div>
                   </template>
                 </Select>
-              </div>
-              <div class="status-control-box" v-else>
-                <span class="chip-role">EXPEDITION STATUS</span>
-                <span class="status-pill status-readonly">{{ selectedTrip.status.toUpperCase() }}</span>
+                <div v-else class="hero-readonly-pill">
+                  <i :class="statusOptions.find(o => o.value === selectedTrip?.status)?.icon || 'pi pi-circle'" class="text-xs"></i>
+                  <span>{{ selectedTrip?.status?.toUpperCase() }}</span>
+                </div>
               </div>
 
-              <!-- Delete Expedition Button (Munimji Only) -->
-              <Button
-                v-if="isMunimji && ['planned', 'active'].includes(selectedTrip.status)"
-                @click="openEditTripWizard"
-                icon="pi pi-pencil"
-                label="Edit Route"
-                size="small"
-                severity="secondary"
-                outlined
-                :loading="creatingTripLoading"
-                class="btn-edit-expedition"
-              />
-              <Button
-                v-if="isMunimji"
-                @click="showDeleteTripModal = true"
-                icon="pi pi-trash"
-                label="Delete Trip"
-                size="small"
-                severity="danger"
-                outlined
-                class="btn-delete-expedition"
-                title="Permanently delete this expedition and all records"
-              />
+              <div class="hero-meta-item">
+                <span class="hero-meta-label">YOUR ROLE</span>
+                <div class="hero-role-pill">
+                  <i :class="currentUserRole === 'munimji' ? 'pi pi-crown' : currentUserRole === 'co_reviewer' ? 'pi pi-shield' : 'pi pi-user'"></i>
+                  <span class="brand-font">{{ currentUserRole === 'munimji' ? 'Munimji' : currentUserRole === 'co_reviewer' ? 'Co-Reviewer' : 'Participant' }}</span>
+                </div>
+              </div>
             </div>
 
-            <div class="treasurer-chip">
-              <span class="chip-role">YOUR ROLE</span>
-              <span class="chip-name brand-font">
-                <i :class="currentUserRole === 'munimji' ? 'pi pi-crown' : currentUserRole === 'co_reviewer' ? 'pi pi-shield' : 'pi pi-user'"></i>
-                <span>{{ currentUserRole === 'munimji' ? 'Munimji' : currentUserRole === 'co_reviewer' ? 'Co-Reviewer' : 'Participant' }}</span>
-              </span>
+            <!-- Management Actions (Munimji Only) -->
+            <div class="hero-actions-deck" v-if="isMunimji">
+              <div class="hero-meta-item">
+                <span class="hero-meta-label">MANAGE</span>
+                <div class="hero-buttons-row">
+                  <Button
+                    v-if="['planned', 'active'].includes(selectedTrip.status)"
+                    @click="openEditTripWizard"
+                    icon="pi pi-pencil"
+                    label="Edit"
+                    size="small"
+                    severity="secondary"
+                    outlined
+                    :loading="creatingTripLoading"
+                    class="btn-edit-expedition"
+                  />
+                  <Button
+                    @click="showDeleteTripModal = true"
+                    icon="pi pi-trash"
+                    label="Delete Trip"
+                    size="small"
+                    severity="danger"
+                    outlined
+                    class="btn-delete-expedition"
+                    title="Permanently delete this expedition and all records"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -4519,7 +4526,7 @@ html.dark .popover-menu-btn:hover {
    ========================================================================== */
 .wizard-split-layout {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: minmax(320px, 350px) 1fr;
   gap: 24px;
   width: 100%;
   max-width: 1300px;
@@ -4544,7 +4551,7 @@ html.dark .popover-menu-btn:hover {
   background: var(--surface);
   box-shadow: var(--shadow-flat);
   border-radius: 20px;
-  padding: 28px 24px;
+  padding: 22px 18px;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -4668,36 +4675,43 @@ html.dark .popover-menu-btn:hover {
   font-weight: 700 !important;
   letter-spacing: 0.05em !important;
   padding: 2px 8px !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
 }
 
 .pass-route-deck {
-  padding: 14px 18px;
+  padding: 14px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .pass-route-city {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-width: 90px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .pass-city-label {
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .pass-city-code {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 800;
-  letter-spacing: 0.05em;
-  font-family: monospace;
+  letter-spacing: 0.04em;
+  font-family: var(--mono, monospace);
   color: var(--text-main);
+  white-space: nowrap;
 }
 
 .pass-city-name {
@@ -4706,14 +4720,17 @@ html.dark .popover-menu-btn:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  width: 100%;
 }
 
 .pass-flight-path {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  flex: 1;
+  gap: 3px;
+  flex: 0 0 auto;
+  min-width: 72px;
+  max-width: 86px;
   padding: 0 4px;
 }
 
@@ -4725,14 +4742,15 @@ html.dark .popover-menu-btn:hover {
 .pass-flight-line {
   width: 100%;
   height: 1px;
-  border-top: 1px dashed var(--border-subtle, rgba(255, 255, 255, 0.2));
+  border-top: 1px dashed var(--border, rgba(125, 133, 146, 0.3));
 }
 
 .pass-transport-mode {
-  font-size: 8px;
+  font-size: 7.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 /* Perforation Divider */
@@ -4748,8 +4766,8 @@ html.dark .popover-menu-btn:hover {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--surface);
-  box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
+  background: var(--bg);
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.2);
   position: absolute;
   top: 2px;
 }
@@ -4765,7 +4783,7 @@ html.dark .popover-menu-btn:hover {
 .perforation-dashed-line {
   width: 100%;
   margin: 0 16px;
-  border-top: 2px dashed rgba(255, 255, 255, 0.12);
+  border-top: 1.5px dashed var(--border, rgba(125, 133, 146, 0.3));
 }
 
 /* Meta Grid */
@@ -5257,12 +5275,43 @@ html.dark .popover-menu-btn:hover {
 
 @media (max-width: 900px) {
   .wizard-split-layout {
-    grid-template-columns: 1fr;
-    max-width: 100%;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
   .wizard-sidebar-visual {
-    display: none;
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 14px 12px !important;
+    border-radius: 16px !important;
+    box-sizing: border-box !important;
+  }
+
+  .pass-card {
+    width: 100% !important;
+    border-radius: 14px !important;
+  }
+
+  .pass-top-stub {
+    padding: 12px 14px 10px !important;
+  }
+
+  .pass-route-deck {
+    padding: 10px 14px !important;
+    gap: 10px !important;
+  }
+
+  .pass-meta-grid {
+    padding: 10px 14px !important;
+    gap: 10px 8px !important;
+  }
+
+  .pass-barcode-footer {
+    padding: 10px 14px !important;
   }
 }
 
@@ -7007,47 +7056,45 @@ html.dark .neu-table td {
 /* Status Controller & Actions Cluster */
 .hero-right {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-end;
+  gap: 16px;
   flex-wrap: wrap;
   flex-shrink: 0;
   margin-left: auto;
 }
 
-.hero-actions-cluster {
+.hero-meta-deck {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.hero-actions-deck {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  flex-wrap: nowrap;
-  flex-shrink: 0;
 }
 
-.btn-edit-expedition,
-.btn-delete-expedition {
-  height: 36px !important;
-  padding: 0 12px !important;
-  border-radius: 10px !important;
-  font-size: 11px !important;
-  font-weight: 600 !important;
-  white-space: nowrap !important;
-  flex-shrink: 0 !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 6px !important;
-}
-
-.treasurer-chip .chip-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  margin-top: 2px;
-}
-
-.status-control-box {
+.hero-meta-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+}
+
+.hero-meta-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.hero-buttons-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .status-select-component {
@@ -7055,10 +7102,11 @@ html.dark .neu-table td {
   box-shadow: var(--shadow-inset) !important;
   border: 1px solid var(--border, rgba(125, 133, 146, 0.2)) !important;
   border-radius: 10px !important;
-  min-width: 145px;
-  height: 36px;
+  min-width: 140px;
+  height: 38px;
   display: flex;
   align-items: center;
+  box-sizing: border-box;
 }
 
 .status-select-component :deep(.p-select-label) {
@@ -7068,6 +7116,40 @@ html.dark .neu-table td {
 
 .status-select-component :deep(.p-select-dropdown) {
   width: 28px;
+}
+
+.hero-readonly-pill,
+.hero-role-pill {
+  background: var(--surface);
+  box-shadow: var(--shadow-flat-sm);
+  border: 1px solid var(--border, rgba(125, 133, 146, 0.2));
+  border-radius: 10px;
+  height: 38px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.btn-edit-expedition,
+.btn-delete-expedition {
+  height: 38px !important;
+  padding: 0 14px !important;
+  border-radius: 10px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  box-shadow: var(--shadow-flat-sm) !important;
+  box-sizing: border-box;
 }
 
 /* Modal Form PrimeVue Select styling (consistent with .neu-field) */
@@ -7629,54 +7711,56 @@ html.dark .neu-table td {
     flex: 0 0 auto !important;
     display: flex !important;
     flex-direction: column !important;
-    gap: 10px !important;
+    gap: 12px !important;
     width: 100% !important;
-    margin: 0 !important;
+    margin: 8px 0 0 0 !important;
     height: auto !important;
-  }
-
-  .hero-actions-cluster {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
     align-items: stretch !important;
-    gap: 8px !important;
+  }
+
+  .hero-meta-deck {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+
+  .hero-meta-deck .hero-meta-item {
     width: 100% !important;
   }
 
-  .status-control-box {
-    flex: 1 1 100% !important;
+  .status-select-component,
+  .hero-readonly-pill,
+  .hero-role-pill {
     width: 100% !important;
-  }
-
-  .status-select-component {
-    width: 100% !important;
-    min-width: unset !important;
+    min-width: 0 !important;
+    justify-content: center !important;
     height: 38px !important;
+  }
+
+  .hero-actions-deck {
+    width: 100% !important;
+  }
+
+  .hero-actions-deck .hero-meta-item {
+    width: 100% !important;
+  }
+
+  .hero-buttons-row {
+    width: 100% !important;
+    display: flex !important;
+    gap: 8px !important;
   }
 
   .btn-edit-expedition,
   .btn-delete-expedition {
     flex: 1 1 0 !important;
     min-width: 0 !important;
-    justify-content: center !important;
-    height: 36px !important;
-    font-size: 11px !important;
-    padding: 0 8px !important;
-    white-space: nowrap !important;
-  }
-
-  .treasurer-chip {
     width: 100% !important;
-    flex-direction: row !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    padding: 8px 14px !important;
-    border-radius: 12px !important;
-  }
-
-  .treasurer-chip .chip-name {
-    margin-top: 0 !important;
+    justify-content: center !important;
+    height: 38px !important;
+    font-size: 12px !important;
+    padding: 0 10px !important;
   }
 }
 
