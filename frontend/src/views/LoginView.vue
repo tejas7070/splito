@@ -614,6 +614,7 @@ const handleResetPassword = async () => {
                 v-model="regPassword" 
                 required 
                 placeholder="••••••••"
+                :feedback="false"
                 toggleMask
                 fluid
               />
@@ -808,6 +809,7 @@ const handleResetPassword = async () => {
                 v-model="forgotNewPassword" 
                 required 
                 placeholder="••••••••"
+                :feedback="false"
                 toggleMask
                 fluid
               />
