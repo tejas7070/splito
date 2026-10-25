@@ -5352,7 +5352,7 @@ html.dark .popover-menu-btn:hover {
 }
 
 .hero-left {
-  flex: 1 1 300px;
+  flex: 1;
   min-width: 0;
 }
 
@@ -7610,22 +7610,29 @@ html.dark .neu-table td {
   .trip-hero-section {
     flex-direction: column !important;
     align-items: stretch !important;
-    padding: 18px 16px !important;
-    gap: 14px !important;
+    justify-content: flex-start !important;
+    padding: 16px 14px !important;
+    gap: 12px !important;
+    height: auto !important;
+    min-height: unset !important;
+    flex: 0 0 auto !important;
   }
 
   .hero-left {
-    flex: none !important;
+    flex: 0 0 auto !important;
     width: 100% !important;
     min-width: 0 !important;
+    height: auto !important;
   }
 
   .hero-right {
+    flex: 0 0 auto !important;
     display: flex !important;
     flex-direction: column !important;
     gap: 10px !important;
     width: 100% !important;
     margin: 0 !important;
+    height: auto !important;
   }
 
   .hero-actions-cluster {
@@ -7749,14 +7756,19 @@ html.dark .neu-table td {
   }
 
   .trip-hero-section {
-    padding: 16px 14px !important;
-    gap: 12px !important;
+    padding: 14px 12px !important;
+    gap: 10px !important;
     border-radius: 16px !important;
+    justify-content: flex-start !important;
+    height: auto !important;
+    min-height: unset !important;
+    flex: 0 0 auto !important;
   }
 
   .hero-left {
-    flex: none !important;
+    flex: 0 0 auto !important;
     width: 100% !important;
+    height: auto !important;
   }
 
   .hero-title {
@@ -9240,358 +9252,4 @@ html.dark .neu-table td {
   }
 }
 
-/* ==========================================================================
-   Comprehensive Mobile & Tablet Responsive Optimizations (Trip Wizard & Dashboard)
-   ========================================================================== */
-@media (max-width: 768px) {
-  .app-content-layout {
-    padding: 12px 10px !important;
-    gap: 12px !important;
-  }
-
-  .wizard-split-layout {
-    grid-template-columns: 1fr !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  .wizard-surface-card {
-    padding: 18px 14px !important;
-    border-radius: 16px !important;
-    gap: 16px !important;
-  }
-
-  .wizard-section-box {
-    padding: 14px 12px !important;
-    border-radius: 14px !important;
-    gap: 12px !important;
-  }
-
-  .route-expedition-box {
-    padding: 14px 12px !important;
-    border-radius: 14px !important;
-    gap: 14px !important;
-  }
-
-  .route-section-heading {
-    padding-bottom: 10px !important;
-    margin-bottom: 2px !important;
-  }
-
-  .route-section-title {
-    font-size: 13px !important;
-    letter-spacing: 0.6px !important;
-  }
-
-  .route-section-subtitle {
-    font-size: 11px !important;
-    line-height: 1.35 !important;
-  }
-
-  .route-milestone-card {
-    padding: 12px 12px !important;
-    border-radius: 12px !important;
-    gap: 8px !important;
-  }
-
-  .milestone-badge-row {
-    flex-wrap: wrap !important;
-    gap: 6px !important;
-  }
-
-  .milestone-pill {
-    font-size: 10px !important;
-    padding: 3px 8px !important;
-  }
-
-  .milestone-role-hint {
-    font-size: 11px !important;
-  }
-
-  .milestone-subtext {
-    font-size: 10px !important;
-    line-height: 1.35 !important;
-  }
-
-  .trip-stops-editor {
-    padding: 12px 10px !important;
-    border-radius: 12px !important;
-    gap: 10px !important;
-    margin: 2px 0 !important;
-  }
-
-  .trip-stops-heading {
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 8px !important;
-  }
-
-  .stops-section-title {
-    font-size: 12px !important;
-  }
-
-  .trip-stops-list {
-    gap: 8px !important;
-  }
-
-  .trip-stop-row {
-    grid-template-columns: 28px 26px minmax(0, 1fr) 30px !important;
-    gap: 8px !important;
-    padding: 8px 10px !important;
-    border-radius: 12px !important;
-  }
-
-  .trip-stop-drag-handle {
-    width: 28px !important;
-    height: 28px !important;
-    font-size: 12px !important;
-    border-radius: 8px !important;
-    touch-action: none !important;
-  }
-
-  .trip-stop-order {
-    width: 26px !important;
-    height: 26px !important;
-    min-width: 26px !important;
-    font-size: 11px !important;
-    border-radius: 8px !important;
-  }
-
-  .trip-stop-delete-btn {
-    width: 30px !important;
-    height: 30px !important;
-    font-size: 12px !important;
-    border-radius: 8px !important;
-  }
-
-  .total-distance-card {
-    padding: 12px 14px !important;
-    border-radius: 14px !important;
-    gap: 10px !important;
-  }
-
-  .total-distance-header {
-    gap: 8px !important;
-  }
-
-  .total-distance-badge-wrap {
-    gap: 10px !important;
-  }
-
-  .total-distance-icon-glow {
-    width: 36px !important;
-    height: 36px !important;
-    font-size: 16px !important;
-    border-radius: 10px !important;
-  }
-
-  .total-distance-label {
-    font-size: 10px !important;
-  }
-
-  .total-distance-value {
-    font-size: 20px !important;
-  }
-
-  .total-distance-legs-list {
-    gap: 8px !important;
-  }
-
-  .distance-leg-item {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 6px !important;
-    padding: 8px 10px !important;
-    border-radius: 8px !important;
-  }
-
-  .leg-left {
-    width: 100% !important;
-    align-items: flex-start !important;
-  }
-
-  .leg-names {
-    flex-wrap: wrap !important;
-    white-space: normal !important;
-    word-break: break-word !important;
-    font-size: 11px !important;
-    line-height: 1.35 !important;
-  }
-
-  .leg-km {
-    align-self: flex-end !important;
-    font-size: 12px !important;
-  }
-
-  .wizard-two-col {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
-  }
-
-  .wizard-two-col input[type="datetime-local"] {
-    width: 100% !important;
-    box-sizing: border-box !important;
-    min-height: 42px !important;
-    font-size: 13px !important;
-    padding: 9px 12px !important;
-  }
-
-  .wizard-actions-bar {
-    flex-direction: column-reverse !important;
-    gap: 10px !important;
-    padding-top: 14px !important;
-    margin-top: 6px !important;
-  }
-
-  .wizard-actions-bar button {
-    width: 100% !important;
-    justify-content: center !important;
-  }
-
-  .btn-wizard-next,
-  .btn-wizard-launch {
-    min-height: 46px !important;
-    font-size: 14px !important;
-    font-weight: 700 !important;
-  }
-
-  .btn-wizard-back-small {
-    min-height: 38px !important;
-  }
-
-  .summary-details-grid {
-    grid-template-columns: 1fr !important;
-    gap: 10px !important;
-  }
-
-  .summary-col {
-    padding: 8px 10px !important;
-    background: rgba(255, 255, 255, 0.02) !important;
-    border-radius: 8px !important;
-  }
-
-  .summary-val {
-    word-break: break-word !important;
-  }
-}
-
-/* Extra Compact Mobile Screens (<= 480px, e.g. iPhone SE, Fold) */
-@media (max-width: 480px) {
-  .app-content-layout {
-    padding: 8px 6px !important;
-    gap: 8px !important;
-  }
-
-  .wizard-surface-card {
-    padding: 12px 10px !important;
-    border-radius: 14px !important;
-    gap: 12px !important;
-  }
-
-  .wizard-stepper {
-    padding: 5px 6px !important;
-    gap: 2px !important;
-  }
-
-  .stepper-node {
-    padding: 4px 4px !important;
-    gap: 4px !important;
-  }
-
-  .stepper-node:not(.node-active) .node-title {
-    display: none !important;
-  }
-
-  .stepper-node.node-active {
-    flex: 2 !important;
-    background: rgba(56, 189, 248, 0.08) !important;
-    border-radius: 8px !important;
-  }
-
-  .stepper-node.node-active .node-title {
-    font-size: 11px !important;
-    font-weight: 700 !important;
-  }
-
-  .node-circle {
-    width: 22px !important;
-    height: 22px !important;
-    min-width: 22px !important;
-    font-size: 10px !important;
-  }
-
-  .step-intro {
-    gap: 10px !important;
-  }
-
-  .step-icon-badge {
-    width: 36px !important;
-    height: 36px !important;
-    min-width: 36px !important;
-    font-size: 15px !important;
-  }
-
-  .step-heading {
-    font-size: 16px !important;
-    line-height: 1.25 !important;
-  }
-
-  .step-subheading {
-    font-size: 11px !important;
-  }
-
-  .wizard-section-box {
-    padding: 10px 8px !important;
-    border-radius: 12px !important;
-    gap: 10px !important;
-  }
-
-  .route-expedition-box {
-    padding: 10px 8px !important;
-    border-radius: 12px !important;
-    gap: 10px !important;
-  }
-
-  .route-milestone-card {
-    padding: 10px 8px !important;
-    border-radius: 10px !important;
-    gap: 6px !important;
-  }
-
-  .trip-stops-editor {
-    padding: 8px 6px !important;
-    border-radius: 10px !important;
-    gap: 8px !important;
-  }
-
-  .trip-stop-row {
-    grid-template-columns: 24px 22px minmax(0, 1fr) 28px !important;
-    gap: 6px !important;
-    padding: 6px 8px !important;
-    border-radius: 10px !important;
-  }
-
-  .trip-stop-drag-handle {
-    width: 24px !important;
-    height: 24px !important;
-    font-size: 11px !important;
-    border-radius: 6px !important;
-  }
-
-  .trip-stop-order {
-    width: 22px !important;
-    height: 22px !important;
-    min-width: 22px !important;
-    font-size: 10px !important;
-    border-radius: 6px !important;
-  }
-
-  .trip-stop-delete-btn {
-    width: 28px !important;
-    height: 28px !important;
-    font-size: 11px !important;
-    border-radius: 6px !important;
-  }
-}
 </style>
