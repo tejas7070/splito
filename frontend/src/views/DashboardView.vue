@@ -8533,6 +8533,347 @@ html.dark .neu-table td {
   text-align: center;
 }
 
+.trip-stop-drag-handle:hover {
+  color: var(--accent);
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.trip-stop-drag-handle:active {
+  cursor: grabbing;
+}
+
+.trip-stop-order {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: var(--accent, #38bdf8);
+  font-size: 13px;
+  font-weight: 800;
+  user-select: none;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.12);
+}
+
+.route-expedition-box {
+  padding: 22px !important;
+  border-radius: 18px !important;
+  gap: 18px !important;
+}
+
+.route-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.07));
+}
+
+.route-section-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  display: flex;
+  align-items: center;
+}
+
+.route-section-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.route-milestone-card {
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.route-milestone-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+}
+
+.start-milestone-card {
+  border-left: 3px solid #10b981;
+}
+
+.destination-milestone-card {
+  border-left: 3px solid #f43f5e;
+}
+
+.milestone-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.milestone-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  text-transform: uppercase;
+}
+
+.start-pill {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.dest-pill {
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.milestone-role-hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.milestone-subtext {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.stops-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+}
+
+.trip-stops-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px dashed rgba(255, 255, 255, 0.09);
+  margin: 4px 0;
+}
+
+.trip-stop-input-wrap {
+  min-width: 0;
+  width: 100%;
+}
+
+.trip-stop-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trip-stop-delete-btn {
+  width: 34px !important;
+  height: 34px !important;
+  color: var(--text-muted) !important;
+  border-radius: 10px !important;
+  transition: all 0.15s ease !important;
+}
+
+.trip-stop-delete-btn:hover {
+  color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.15) !important;
+}
+
+.total-distance-card {
+  margin-top: 12px;
+  padding: 16px 20px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  box-shadow: var(--shadow-flat-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.total-distance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.total-distance-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.total-distance-icon-glow {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.14);
+  color: var(--accent, #38bdf8);
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.15);
+}
+
+.total-distance-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+
+.total-distance-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.total-distance-loading,
+.total-distance-direct {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.legs-count-pill {
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.total-distance-legs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+.distance-leg-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  gap: 8px;
+}
+
+.leg-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.leg-index {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.leg-names {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leg-names strong {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.leg-arrow {
+  font-size: 10px;
+  color: var(--accent);
+}
+
+.leg-km {
+  font-weight: 700;
+  color: var(--accent, #38bdf8);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.trip-stop-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0;
+}
+
+
+
+.route-map-preview {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle, rgba(125, 133, 146, 0.2));
+}
+
+.route-distance-note,
+.route-map-empty {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.route-map-empty {
+  margin: 0;
+  padding: 20px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-inset);
+  text-align: center;
+}
+
+.pass-stop-list {
+  margin: -6px 0 16px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+}
+
 @media (max-width: 768px) {
   .trip-stops-heading,
   .route-map-preview-heading {
@@ -8541,6 +8882,361 @@ html.dark .neu-table td {
 
   .route-distance-note {
     text-align: right;
+  }
+}
+
+/* ==========================================================================
+   Comprehensive Mobile & Tablet Responsive Optimizations (Trip Wizard & Dashboard)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .app-content-layout {
+    padding: 12px 10px !important;
+    gap: 12px !important;
+  }
+
+  .wizard-split-layout {
+    grid-template-columns: 1fr !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .wizard-surface-card {
+    padding: 18px 14px !important;
+    border-radius: 16px !important;
+    gap: 16px !important;
+  }
+
+  .wizard-section-box {
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+    gap: 12px !important;
+  }
+
+  .route-expedition-box {
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+    gap: 14px !important;
+  }
+
+  .route-section-heading {
+    padding-bottom: 10px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .route-section-title {
+    font-size: 13px !important;
+    letter-spacing: 0.6px !important;
+  }
+
+  .route-section-subtitle {
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+  }
+
+  .route-milestone-card {
+    padding: 12px 12px !important;
+    border-radius: 12px !important;
+    gap: 8px !important;
+  }
+
+  .milestone-badge-row {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .milestone-pill {
+    font-size: 10px !important;
+    padding: 3px 8px !important;
+  }
+
+  .milestone-role-hint {
+    font-size: 11px !important;
+  }
+
+  .milestone-subtext {
+    font-size: 10px !important;
+    line-height: 1.35 !important;
+  }
+
+  .trip-stops-editor {
+    padding: 12px 10px !important;
+    border-radius: 12px !important;
+    gap: 10px !important;
+    margin: 2px 0 !important;
+  }
+
+  .trip-stops-heading {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+
+  .stops-section-title {
+    font-size: 12px !important;
+  }
+
+  .trip-stops-list {
+    gap: 8px !important;
+  }
+
+  .trip-stop-row {
+    grid-template-columns: 28px 26px minmax(0, 1fr) 30px !important;
+    gap: 8px !important;
+    padding: 8px 10px !important;
+    border-radius: 12px !important;
+  }
+
+  .trip-stop-drag-handle {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+    touch-action: none !important;
+  }
+
+  .trip-stop-order {
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    font-size: 11px !important;
+    border-radius: 8px !important;
+  }
+
+  .trip-stop-delete-btn {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+  }
+
+  .total-distance-card {
+    padding: 12px 14px !important;
+    border-radius: 14px !important;
+    gap: 10px !important;
+  }
+
+  .total-distance-header {
+    gap: 8px !important;
+  }
+
+  .total-distance-badge-wrap {
+    gap: 10px !important;
+  }
+
+  .total-distance-icon-glow {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 16px !important;
+    border-radius: 10px !important;
+  }
+
+  .total-distance-label {
+    font-size: 10px !important;
+  }
+
+  .total-distance-value {
+    font-size: 20px !important;
+  }
+
+  .total-distance-legs-list {
+    gap: 8px !important;
+  }
+
+  .distance-leg-item {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+    padding: 8px 10px !important;
+    border-radius: 8px !important;
+  }
+
+  .leg-left {
+    width: 100% !important;
+    align-items: flex-start !important;
+  }
+
+  .leg-names {
+    flex-wrap: wrap !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+  }
+
+  .leg-km {
+    align-self: flex-end !important;
+    font-size: 12px !important;
+  }
+
+  .wizard-two-col {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .wizard-two-col input[type="datetime-local"] {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-height: 42px !important;
+    font-size: 13px !important;
+    padding: 9px 12px !important;
+  }
+
+  .wizard-actions-bar {
+    flex-direction: column-reverse !important;
+    gap: 10px !important;
+    padding-top: 14px !important;
+    margin-top: 6px !important;
+  }
+
+  .wizard-actions-bar button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  .btn-wizard-next,
+  .btn-wizard-launch {
+    min-height: 46px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+  }
+
+  .btn-wizard-back-small {
+    min-height: 38px !important;
+  }
+
+  .summary-details-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .summary-col {
+    padding: 8px 10px !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border-radius: 8px !important;
+  }
+
+  .summary-val {
+    word-break: break-word !important;
+  }
+}
+
+/* Extra Compact Mobile Screens (<= 480px, e.g. iPhone SE, Fold) */
+@media (max-width: 480px) {
+  .app-content-layout {
+    padding: 8px 6px !important;
+    gap: 8px !important;
+  }
+
+  .wizard-surface-card {
+    padding: 12px 10px !important;
+    border-radius: 14px !important;
+    gap: 12px !important;
+  }
+
+  .wizard-stepper {
+    padding: 5px 6px !important;
+    gap: 2px !important;
+  }
+
+  .stepper-node {
+    padding: 4px 4px !important;
+    gap: 4px !important;
+  }
+
+  .stepper-node:not(.node-active) .node-title {
+    display: none !important;
+  }
+
+  .stepper-node.node-active {
+    flex: 2 !important;
+    background: rgba(56, 189, 248, 0.08) !important;
+    border-radius: 8px !important;
+  }
+
+  .stepper-node.node-active .node-title {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+  }
+
+  .node-circle {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    font-size: 10px !important;
+  }
+
+  .step-intro {
+    gap: 10px !important;
+  }
+
+  .step-icon-badge {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    font-size: 15px !important;
+  }
+
+  .step-heading {
+    font-size: 16px !important;
+    line-height: 1.25 !important;
+  }
+
+  .step-subheading {
+    font-size: 11px !important;
+  }
+
+  .wizard-section-box {
+    padding: 10px 8px !important;
+    border-radius: 12px !important;
+    gap: 10px !important;
+  }
+
+  .route-expedition-box {
+    padding: 10px 8px !important;
+    border-radius: 12px !important;
+    gap: 10px !important;
+  }
+
+  .route-milestone-card {
+    padding: 10px 8px !important;
+    border-radius: 10px !important;
+    gap: 6px !important;
+  }
+
+  .trip-stops-editor {
+    padding: 8px 6px !important;
+    border-radius: 10px !important;
+    gap: 8px !important;
+  }
+
+  .trip-stop-row {
+    grid-template-columns: 24px 22px minmax(0, 1fr) 28px !important;
+    gap: 6px !important;
+    padding: 6px 8px !important;
+    border-radius: 10px !important;
+  }
+
+  .trip-stop-drag-handle {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 11px !important;
+    border-radius: 6px !important;
+  }
+
+  .trip-stop-order {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    font-size: 10px !important;
+    border-radius: 6px !important;
+  }
+
+  .trip-stop-delete-btn {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+    border-radius: 6px !important;
   }
 }
 
