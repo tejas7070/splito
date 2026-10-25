@@ -13,7 +13,6 @@ import type { RouteMapPoint } from '../components/RouteMap.vue';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import Tag from 'primevue/tag';
-import Badge from 'primevue/badge';
 import InputText from 'primevue/inputtext';
 import InputNumber from 'primevue/inputnumber';
 import Textarea from 'primevue/textarea';
@@ -1660,7 +1659,7 @@ onMounted(async () => {
 
           <div class="sidebar-top pending-header">
             <span class="sidebar-label">📬 PENDING INVITATIONS</span>
-            <Badge :value="myPendingInvitations.length" severity="warn" />
+            <span class="nav-count-pill">{{ myPendingInvitations.length }}</span>
           </div>
           <div class="sidebar-invitations-scroll">
             <div 
@@ -1704,7 +1703,7 @@ onMounted(async () => {
 
         <div class="sidebar-top">
           <span class="sidebar-label">ACTIVE TRIPS</span>
-          <Badge :value="trips.filter(t => t.user_status !== 'invited').length" severity="secondary" />
+          <span class="nav-count-pill">{{ trips.filter(t => t.user_status !== 'invited').length }}</span>
         </div>
 
         <div class="trip-items-scroll">
@@ -1736,28 +1735,40 @@ onMounted(async () => {
               @click="activeTab = 'ledger'" 
               :class="['sidebar-nav-pill', { active: activeTab === 'ledger' }]"
             >
-              <span>📊 Treasury & Ledger</span>
+              <div class="sidebar-pill-content">
+                <i class="pi pi-chart-bar"></i>
+                <span>Treasury & Ledger</span>
+              </div>
             </button>
             <button 
               @click="activeTab = 'claims'" 
               :class="['sidebar-nav-pill', { active: activeTab === 'claims' }]"
             >
-              <span>🧾 Claims Protocol</span>
-              <Badge v-if="claimsList.length > 0" :value="claimsList.length" severity="warn" />
+              <div class="sidebar-pill-content">
+                <i class="pi pi-receipt"></i>
+                <span>Claims Protocol</span>
+              </div>
+              <span v-if="claimsList.length > 0" class="nav-count-pill">{{ claimsList.length }}</span>
             </button>
             <button 
               @click="activeTab = 'members'" 
               :class="['sidebar-nav-pill', { active: activeTab === 'members' }]"
             >
-              <span>👥 Members & Invite</span>
-              <Badge v-if="membersList.length > 0" :value="membersList.length" severity="info" />
+              <div class="sidebar-pill-content">
+                <i class="pi pi-users"></i>
+                <span>Members & Invite</span>
+              </div>
+              <span v-if="membersList.length > 0" class="nav-count-pill">{{ membersList.length }}</span>
             </button>
             <button 
               @click="activeTab = 'settlement'" 
               :class="['sidebar-nav-pill', { active: activeTab === 'settlement' }]"
             >
-              <span>🤝 Settlement ("Who Owes")</span>
-              <Badge v-if="settlementData?.transfers?.length > 0" :value="settlementData.transfers.length" severity="danger" />
+              <div class="sidebar-pill-content">
+                <i class="pi pi-arrows-h"></i>
+                <span>Settlement ("Who Owes")</span>
+              </div>
+              <span v-if="settlementData?.transfers?.length > 0" class="nav-count-pill">{{ settlementData.transfers.length }}</span>
             </button>
           </div>
         </div>
@@ -2571,7 +2582,7 @@ onMounted(async () => {
             >
               <i class="pi pi-receipt"></i>
               <span>Claims</span>
-              <Badge v-if="claimsList.length > 0" :value="claimsList.length" severity="warn" />
+              <span v-if="claimsList.length > 0" class="nav-count-pill">{{ claimsList.length }}</span>
             </button>
             <button 
               type="button"
@@ -2580,7 +2591,7 @@ onMounted(async () => {
             >
               <i class="pi pi-users"></i>
               <span>Members</span>
-              <Badge v-if="membersList.length > 0" :value="membersList.length" severity="info" />
+              <span v-if="membersList.length > 0" class="nav-count-pill">{{ membersList.length }}</span>
             </button>
             <button 
               type="button"
@@ -2589,7 +2600,7 @@ onMounted(async () => {
             >
               <i class="pi pi-arrows-h"></i>
               <span>Settlement</span>
-              <Badge v-if="settlementData?.transfers?.length > 0" :value="settlementData.transfers.length" severity="danger" />
+              <span v-if="settlementData?.transfers?.length > 0" class="nav-count-pill">{{ settlementData.transfers.length }}</span>
             </button>
           </nav>
 
@@ -2611,9 +2622,9 @@ onMounted(async () => {
               <span class="metric-sub">Tolls, hotel, fuel & common food</span>
             </div>
 
-            <div class="metric-card card-focal">
-              <span class="metric-heading focal-heading">AVAILABLE CASH IN HAND</span>
-              <div class="metric-number mono-num focal-number">{{ formatINR(dashboard.available_cash_paise) }}</div>
+            <div class="metric-card">
+              <span class="metric-heading">AVAILABLE CASH IN HAND</span>
+              <div class="metric-number mono-num">{{ formatINR(dashboard.available_cash_paise) }}</div>
               <span class="metric-sub">Central treasury with Munimji</span>
             </div>
 
@@ -3073,9 +3084,9 @@ onMounted(async () => {
               <div class="metric-number mono-num">{{ formatINR(Math.round(settlementData.equal_share_per_user * 100)) }}</div>
               <span class="metric-sub">Split equally across {{ settlementData.member_count }} members</span>
             </div>
-            <div class="metric-card card-focal">
-              <span class="metric-heading focal-heading">CENTRAL TREASURY CASH</span>
-              <div class="metric-number mono-num focal-number">{{ formatINR(settlementData.treasury_summary?.available_cash_paise || 0) }}</div>
+            <div class="metric-card">
+              <span class="metric-heading">CENTRAL TREASURY CASH</span>
+              <div class="metric-number mono-num">{{ formatINR(settlementData.treasury_summary?.available_cash_paise || 0) }}</div>
               <span class="metric-sub">Held in pool for claims & refunds</span>
             </div>
             <div class="metric-card">
@@ -4404,6 +4415,48 @@ html.dark .popover-menu-btn:hover {
   color: var(--text-muted);
 }
 
+.sidebar-pill-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-pill-content i {
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: color 0.18s ease;
+}
+
+.sidebar-nav-pill.active .sidebar-pill-content i {
+  color: var(--accent);
+}
+
+.nav-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+  transition: all 0.18s ease;
+}
+
+.sidebar-nav-pill.active .nav-count-pill,
+.workspace-tab-btn.active .nav-count-pill {
+  background: rgba(0, 240, 255, 0.14);
+  color: var(--accent);
+  border-color: rgba(0, 240, 255, 0.3);
+}
+
+
 .trip-neu-item {
   background: var(--surface);
   box-shadow: var(--shadow-flat-sm);
@@ -5367,7 +5420,7 @@ html.dark .popover-menu-btn:hover {
 }
 
 .focal-heading {
-  color: var(--accent);
+  color: var(--text-muted);
 }
 
 .metric-number {
