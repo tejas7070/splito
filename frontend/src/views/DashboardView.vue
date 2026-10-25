@@ -858,7 +858,7 @@ const handleRecordExpense = async () => {
   if (isOverContributions) {
     const deficit = expenseAmount - totalContributions;
     toast.warn(
-      `⚠️ Treasury Warning: Group expense (₹${expenseAmount.toLocaleString('en-IN')}) exceeds total expedition contributions (₹${totalContributions.toLocaleString('en-IN')}) by ₹${deficit.toLocaleString('en-IN')}!`,
+      `Treasury Warning: Group expense (₹${expenseAmount.toLocaleString('en-IN')}) exceeds total expedition contributions (₹${totalContributions.toLocaleString('en-IN')}) by ₹${deficit.toLocaleString('en-IN')}!`,
       7000
     );
   }
@@ -1042,6 +1042,12 @@ const isCoReviewer = computed(() => {
   );
   if (myMember && myMember.role === 'co_reviewer') return true;
   return false;
+});
+
+const currentUserRole = computed(() => {
+  if (isMunimji.value) return 'munimji';
+  if (isCoReviewer.value) return 'co_reviewer';
+  return selectedTrip.value?.user_role || 'participant';
 });
 
 const canReviewClaim = (claim: any) => {
@@ -1333,7 +1339,15 @@ const selectTrip = async (trip: Trip) => {
   mobileSidebarOpen.value = false;
   try {
     const detail = await tripService.getDetail(trip.id);
-    selectedTrip.value = detail.data.trip;
+    const loadedTrip = detail.data.trip;
+    if (detail.data.membership) {
+      loadedTrip.user_role = detail.data.membership.role;
+      loadedTrip.user_status = detail.data.membership.status;
+    } else if (loadedTrip.created_by === authStore.user?.id) {
+      loadedTrip.user_role = 'munimji';
+      loadedTrip.user_status = 'active';
+    }
+    selectedTrip.value = loadedTrip;
     const res = await tripService.getDashboard(trip.id);
     dashboard.value = res.data;
     await loadClaims(trip.id);
@@ -1658,7 +1672,7 @@ onMounted(async () => {
         <div class="sidebar-invitations-group" v-if="myPendingInvitations.length > 0">
 
           <div class="sidebar-top pending-header">
-            <span class="sidebar-label">📬 PENDING INVITATIONS</span>
+            <span class="sidebar-label"><i class="pi pi-envelope"></i> PENDING INVITATIONS</span>
             <span class="nav-count-pill">{{ myPendingInvitations.length }}</span>
           </div>
           <div class="sidebar-invitations-scroll">
@@ -2431,13 +2445,13 @@ onMounted(async () => {
             <span class="hero-badge">EXPEDITION MANIFEST</span>
             <h1 class="hero-title brand-font">{{ selectedTrip.title }}</h1>
             <div class="hero-route-line">
-              <span class="route-node">{{ selectedTrip.start_point }}</span>
+              <span class="route-node" :title="selectedTrip.start_point">{{ selectedTrip.start_point }}</span>
               <template v-for="stop in selectedTrip.stops || []" :key="stop.id || stop.position">
                 <i class="pi pi-arrow-right route-arrow-icon"></i>
-                <span class="route-node">{{ stop.name }}</span>
+                <span class="route-node" :title="stop.name">{{ stop.name }}</span>
               </template>
               <i class="pi pi-arrow-right route-arrow-icon"></i>
-              <span class="route-node">{{ selectedTrip.destination }}</span>
+              <span class="route-node" :title="selectedTrip.destination">{{ selectedTrip.destination }}</span>
             </div>
 
           </div>
@@ -2503,7 +2517,8 @@ onMounted(async () => {
             <div class="treasurer-chip">
               <span class="chip-role">YOUR ROLE</span>
               <span class="chip-name brand-font">
-                {{ selectedTrip.user_role === 'munimji' ? '👑 Munimji' : selectedTrip.user_role === 'co_reviewer' ? '⚖️ Co-Reviewer' : '👤 Participant' }}
+                <i :class="currentUserRole === 'munimji' ? 'pi pi-crown' : currentUserRole === 'co_reviewer' ? 'pi pi-shield' : 'pi pi-user'"></i>
+                <span>{{ currentUserRole === 'munimji' ? 'Munimji' : currentUserRole === 'co_reviewer' ? 'Co-Reviewer' : 'Participant' }}</span>
               </span>
             </div>
           </div>
@@ -2701,13 +2716,13 @@ onMounted(async () => {
                   @click="ledgerSubTab = 'contributions'" 
                   :class="['subnav-pill', { active: ledgerSubTab === 'contributions' }]"
                 >
-                  <span>💰 Contributions ({{ contributionsList.length }})</span>
+                  <i class="pi pi-wallet"></i> <span>Contributions</span> <span class="nav-count-pill">{{ contributionsList.length }}</span>
                 </button>
                 <button 
                   @click="ledgerSubTab = 'expenses'" 
                   :class="['subnav-pill', { active: ledgerSubTab === 'expenses' }]"
                 >
-                  <span>🧾 Group Outflows ({{ expensesList.length }})</span>
+                  <i class="pi pi-receipt"></i> <span>Group Outflows</span> <span class="nav-count-pill">{{ expensesList.length }}</span>
                 </button>
               </div>
             </div>
@@ -2880,7 +2895,7 @@ onMounted(async () => {
 
           <!-- Section 1: Active Participants -->
           <div class="members-sub-section">
-            <h4 class="sub-deck-title brand-font">👥 Active Expedition Members ({{ membersList.length }})</h4>
+            <h4 class="sub-deck-title brand-font"><i class="pi pi-users"></i> Active Expedition Members ({{ membersList.length }})</h4>
             <div v-if="membersList.length === 0" class="empty-records-msg">
               No active participants yet.
             </div>
@@ -2953,7 +2968,7 @@ onMounted(async () => {
           <!-- Section 2: Invitations Manifest (Loaded from dedicated trip_invitations table) -->
           <div class="members-sub-section" style="margin-top: 32px;" v-if="invitationsList.length > 0">
             <div class="sub-section-header">
-              <h4 class="sub-deck-title brand-font">📬 Invitation Manifest & Status ({{ invitationsList.length }})</h4>
+              <h4 class="sub-deck-title brand-font"><i class="pi pi-send"></i> Invitation Manifest & Status ({{ invitationsList.length }})</h4>
             </div>
 
             <div class="members-grid-stack">
@@ -3099,7 +3114,7 @@ onMounted(async () => {
           <!-- SECTION 1: Approved Personal Out-of-Pocket Claims (Owed by Group) -->
           <div class="settlement-section-block">
             <div class="section-title-wrap">
-              <h4 class="sub-deck-title brand-font">🏆 Approved Personal Expense Claims (Owed by Group)</h4>
+              <h4 class="sub-deck-title brand-font"><i class="pi pi-check-circle"></i> Approved Personal Expense Claims (Owed by Group)</h4>
               <span class="section-subtitle-hint">
                 <i class="pi pi-info-circle"></i> Personal expenses paid out of pocket by participants. Once accepted, these are group liabilities owed by the Expedition Group Treasury to the claimant (NOT owed by the individual reviewer who accepted it).
               </span>
@@ -3141,7 +3156,7 @@ onMounted(async () => {
           <!-- SECTION 2: Recommended Settlement Actions & Transfers -->
           <div class="settlement-section-block">
             <div class="section-title-wrap">
-              <h4 class="sub-deck-title brand-font">💸 Recommended Settlement Actions & Direct Transfers</h4>
+              <h4 class="sub-deck-title brand-font"><i class="pi pi-arrows-h"></i> Recommended Settlement Actions & Direct Transfers</h4>
               <span class="section-subtitle-hint">
                 Reconciliation of Group Treasury claim payouts, unspent advance contribution refunds, and member fair share cost equalization.
               </span>
@@ -3173,7 +3188,7 @@ onMounted(async () => {
             </div>
 
             <div v-if="!settlementData || settlementData.transfers.length === 0" class="empty-records-msg">
-              🎉 Everyone is fully settled up! No transfers or payments are currently pending.
+              <i class="pi pi-check-circle" style="color: var(--accent); margin-right: 6px;"></i> Everyone is fully settled up! No transfers or payments are currently pending.
             </div>
             <div v-else class="transfers-card-grid">
               <div v-for="(t, idx) in settlementData.transfers" :key="idx" class="transfer-neu-tile">
@@ -3238,7 +3253,7 @@ onMounted(async () => {
 
           <!-- SECTION 3: Member Balance Ledger Breakdown -->
           <div class="settlement-section-block">
-            <h4 class="sub-deck-title brand-font">📊 Participant Net Balance Manifest</h4>
+            <h4 class="sub-deck-title brand-font"><i class="pi pi-chart-pie"></i> Participant Net Balance Manifest</h4>
             <div v-if="settlementData" class="record-table-wrapper">
               <table class="neu-table">
                 <thead>
@@ -3754,7 +3769,7 @@ onMounted(async () => {
           :closable="false" 
           size="small"
         >
-          ⚠️ <strong>Treasury Deficit Warning:</strong> This expense of ₹{{ Number(newExpense.amount_rupees).toLocaleString('en-IN') }} exceeds the total expedition contributions (₹{{ totalContributionRupees.toLocaleString('en-IN') }}).
+          <i class="pi pi-exclamation-triangle warning-icon"></i> <strong>Treasury Deficit Warning:</strong> This expense of ₹{{ Number(newExpense.amount_rupees).toLocaleString('en-IN') }} exceeds the total expedition contributions (₹{{ totalContributionRupees.toLocaleString('en-IN') }}).
         </Message>
 
         <div class="dialog-actions-row">
@@ -3894,7 +3909,7 @@ onMounted(async () => {
     >
       <div class="space-y-4">
         <Message severity="error" :closable="false" size="small">
-          ⚠️ <strong>Irreversible Action:</strong> Deleting this expedition will permanently erase the entire manifest, member contributions pool, recorded group expenses, and audit logs.
+          <i class="pi pi-exclamation-circle danger-icon"></i> <strong>Irreversible Action:</strong> Deleting this expedition will permanently erase the entire manifest, member contributions pool, recorded group expenses, and audit logs.
         </Message>
 
         <p class="text-sm text-[var(--text-main)]">
@@ -5328,11 +5343,26 @@ html.dark .popover-menu-btn:hover {
   background-color: var(--surface);
   box-shadow: var(--shadow-flat);
   border-radius: 20px;
-  padding: 26px 30px;
+  padding: 22px 26px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.hero-left {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+
+.route-node {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .hero-badge {
@@ -6978,13 +7008,40 @@ html.dark .neu-table td {
 .hero-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .hero-actions-cluster {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-edit-expedition,
+.btn-delete-expedition {
+  height: 36px !important;
+  padding: 0 12px !important;
+  border-radius: 10px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.treasurer-chip .chip-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin-top: 2px;
 }
 
 .status-control-box {

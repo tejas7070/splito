@@ -107,6 +107,8 @@ func (s *TripService) CreateTrip(ctx context.Context, creatorUserID int64, req *
 	if err != nil {
 		return nil, err
 	}
+	trip.UserRole = models.RoleMunimji
+	trip.UserStatus = models.MembershipActive
 
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
@@ -231,6 +233,13 @@ func (s *TripService) GetTripDetail(ctx context.Context, tripID, userID int64) (
 	member, err := s.tripLoader.GetUserMembership(ctx, tripID, userID)
 	if err != nil {
 		return nil, nil, err
+	}
+	if member != nil {
+		trip.UserRole = member.Role
+		trip.UserStatus = member.Status
+	} else if trip.CreatedBy == userID {
+		trip.UserRole = models.RoleMunimji
+		trip.UserStatus = models.MembershipActive
 	}
 
 	return trip, member, nil
