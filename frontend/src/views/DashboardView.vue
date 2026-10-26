@@ -735,7 +735,10 @@ const copiedLinkCode = ref<string | null>(null);
 
 const getTripInviteUrl = (inviteCode?: string) => {
   if (!inviteCode) return '';
-  return `${window.location.origin}/invite/${inviteCode}`;
+  const base = window.location.origin.includes('localhost')
+    ? 'https://splito-alpha.vercel.app'
+    : window.location.origin;
+  return `${base}/invite/${inviteCode}`;
 };
 
 const copyInviteLink = async (inviteCode?: string) => {
@@ -757,8 +760,16 @@ const copyInviteLink = async (inviteCode?: string) => {
 
 const getWhatsAppShareUrl = (trip: Trip) => {
   const url = getTripInviteUrl(trip.invite_code);
-  const text = encodeURIComponent(`Hey! Join our trip "${trip.title || trip.name}" on Splito:\n${url}`);
-  return `https://api.whatsapp.com/send?text=${text}`;
+  const tripName = trip.title || trip.name || 'Expedition';
+  const message = [
+    `🎒 *Trip Invitation: ${tripName}*`,
+    ``,
+    `Hey! You\'ve been invited to join our expedition *${tripName}* on *Splito* 🗺️`,
+    ``,
+    `👉 *Tap to join:*`,
+    url
+  ].join('\n');
+  return `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
 };
 
 const myPendingInvitations = ref<TripInvitation[]>([]);
@@ -3040,7 +3051,9 @@ onMounted(async () => {
                 :icon="copiedLinkCode === selectedTrip.invite_code ? 'pi pi-check' : 'pi pi-copy'" 
                 :label="copiedLinkCode === selectedTrip.invite_code ? 'Copied!' : 'Copy'" 
                 :severity="copiedLinkCode === selectedTrip.invite_code ? 'success' : 'secondary'"
+                outlined
                 size="small"
+                class="btn-banner-copy"
               />
               <a 
                 :href="getWhatsAppShareUrl(selectedTrip)" 
@@ -4584,6 +4597,18 @@ html.dark .popover-menu-btn:hover {
   gap: 10px;
   max-height: 240px;
   overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border, rgba(125, 133, 146, 0.25)) transparent;
+}
+
+.trip-items-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.trip-items-scroll::-webkit-scrollbar-thumb {
+  background: var(--border, rgba(125, 133, 146, 0.25));
+  border-radius: 4px;
 }
 
 /* Sidebar Section Navigation */
@@ -9541,16 +9566,16 @@ html.dark .neu-table td {
 .success-invite-link-card {
   width: 100%;
   max-width: 540px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-flat);
+  border: 1px solid var(--border, rgba(125, 133, 146, 0.2));
+  border-radius: 18px;
   padding: 20px 24px;
   margin: 18px 0 24px 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
   text-align: left;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
 }
 
 .invite-card-header {
@@ -9570,16 +9595,16 @@ html.dark .neu-table td {
 }
 
 .invite-kicker {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 1px;
-  color: #38bdf8;
+  letter-spacing: 0.08em;
+  color: var(--accent, #06b6d4);
   text-transform: uppercase;
 }
 
 .invite-sub {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--text-muted);
   line-height: 1.4;
   margin-top: 2px;
 }
@@ -9592,18 +9617,20 @@ html.dark .neu-table td {
 
 .invite-link-input {
   flex: 1;
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #f1f5f9;
-  padding: 10px 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-inset);
+  border: 1px solid var(--border, rgba(125, 133, 146, 0.2));
+  color: var(--text-main);
+  padding: 0 14px;
+  height: 38px;
   border-radius: 10px;
-  font-size: 13px;
-  font-family: monospace;
+  font-size: 12px;
+  font-family: var(--mono, monospace);
   outline: none;
 }
 
 .invite-link-input:focus {
-  border-color: #38bdf8;
+  border-color: var(--accent, #06b6d4);
 }
 
 .quick-share-buttons {
@@ -9624,26 +9651,40 @@ html.dark .neu-table td {
 }
 
 .share-pill.whatsapp {
-  background: rgba(37, 211, 102, 0.15);
-  color: #25d366;
-  border: 1px solid rgba(37, 211, 102, 0.3);
+  background: #25d366;
+  color: #ffffff !important;
+  border: none;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.25);
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .share-pill.whatsapp:hover {
-  background: rgba(37, 211, 102, 0.25);
+  background: #20ba5a;
+  color: #ffffff !important;
   transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(37, 211, 102, 0.35);
 }
 
 .members-invite-banner {
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 18px 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow-flat);
+  border: 1px solid var(--border, rgba(125, 133, 146, 0.2));
+  border-radius: 18px;
+  padding: 16px 22px;
   margin-bottom: 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 18px;
   flex-wrap: wrap;
 }
 
@@ -9651,32 +9692,35 @@ html.dark .neu-table td {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex: 1 1 240px;
 }
 
 .banner-icon-badge {
   width: 42px;
   height: 42px;
-  border-radius: 10px;
-  background: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
+  border-radius: 12px;
+  background: rgba(6, 182, 212, 0.12);
+  color: var(--accent, #06b6d4);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   flex-shrink: 0;
+  box-shadow: var(--shadow-flat-sm);
 }
 
 .banner-text .banner-kicker {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.8px;
-  color: #38bdf8;
+  letter-spacing: 0.08em;
+  color: var(--accent, #06b6d4);
+  text-transform: uppercase;
 }
 
 .banner-desc {
-  margin: 2px 0 0 0;
+  margin: 3px 0 0 0;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--text-muted);
   line-height: 1.4;
 }
 
@@ -9684,21 +9728,37 @@ html.dark .neu-table td {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1;
+  flex: 1 1 360px;
   min-width: 280px;
-  max-width: 500px;
+  max-width: 620px;
 }
 
 .banner-link-input {
   flex: 1;
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #f1f5f9;
-  padding: 8px 12px;
-  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-inset);
+  border: 1px solid var(--border, rgba(125, 133, 146, 0.2));
+  color: var(--text-main);
+  padding: 0 12px;
+  height: 38px;
+  border-radius: 10px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--mono, monospace);
   outline: none;
+  min-width: 0;
+}
+
+.banner-link-input:focus {
+  border-color: var(--accent, #06b6d4);
+}
+
+.btn-banner-copy {
+  height: 38px !important;
+  border-radius: 10px !important;
+  padding: 0 14px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
 }
 
 .pending-join-requests-section {

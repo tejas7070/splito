@@ -81,19 +81,16 @@ func (l *TripLoader) ListUserTrips(ctx context.Context, userID int64, email stri
 	query := `
 		SELECT t.id, t.name, t.start_location, t.destination, t.start_date, t.end_date,
 		       t.estimated_budget, t.created_by, t.status, COALESCE(t.invite_code, ''), t.created_at, t.updated_at,
-		       COALESCE(tm.role, ti.role, IF(t.created_by = ?, 'munimji', 'participant')) AS user_role,
-		       COALESCE(tm.status, IF(ti.status = 'pending', 'invited', ti.status), IF(t.created_by = ?, 'active', 'invited')) AS user_status
+		       COALESCE(MAX(tm.role), MAX(ti.role), IF(t.created_by = ?, 'munimji', 'participant')) AS user_role,
+		       COALESCE(MAX(tm.status), IF(MAX(ti.status) = 'pending', 'invited', MAX(ti.status)), IF(t.created_by = ?, 'active', 'invited')) AS user_status
 		FROM trips t
 		LEFT JOIN trip_members tm ON tm.trip_id = t.id AND tm.user_id = ? AND tm.status IN ('active', 'requested', 'invited')
 		LEFT JOIN trip_invitations ti ON ti.trip_id = t.id AND LOWER(ti.invitee_email) = LOWER(?) AND ti.status = 'pending'
 		WHERE tm.user_id IS NOT NULL OR ti.id IS NOT NULL OR t.created_by = ?
-		GROUP BY t.id, t.name, t.start_location, t.destination, t.start_date, t.end_date,
-		         t.estimated_budget, t.created_by, t.status, t.invite_code, t.created_at, t.updated_at,
-		         COALESCE(tm.role, ti.role, IF(t.created_by = ?, 'munimji', 'participant')),
-		         COALESCE(tm.status, IF(ti.status = 'pending', 'invited', ti.status), IF(t.created_by = ?, 'active', 'invited'))
+		GROUP BY t.id
 		ORDER BY t.created_at DESC
 	`
-	rows, err := l.db.QueryContext(ctx, query, userID, userID, userID, email, userID, userID, userID)
+	rows, err := l.db.QueryContext(ctx, query, userID, userID, userID, email, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list user trips: %w", err)
 	}
