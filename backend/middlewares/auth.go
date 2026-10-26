@@ -59,3 +59,33 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+func OptionalAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var tokenString string
+		if cookieToken, err := c.Cookie("auth_token"); err == nil && cookieToken != "" {
+			tokenString = cookieToken
+		}
+		if tokenString == "" {
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" {
+				parts := strings.Split(authHeader, " ")
+				if len(parts) == 2 && parts[0] == "Bearer" {
+					tokenString = parts[1]
+				}
+			}
+		}
+		if tokenString != "" {
+			claims := &UserClaims{}
+			token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+				return []byte(cfg.JWTSecret), nil
+			})
+			if err == nil && token.Valid {
+				c.Set("user_id", claims.UserID)
+				c.Set("email", claims.Email)
+			}
+		}
+		c.Next()
+	}
+}
+

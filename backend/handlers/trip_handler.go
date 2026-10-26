@@ -132,6 +132,14 @@ func (h *TripHandler) GetTrip(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Trip not found"})
 		return
 	}
+	if membership == nil && trip.CreatedBy != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: you are not a member of this expedition"})
+		return
+	}
+	if membership != nil && membership.Status == models.MembershipRequested {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: your membership is pending Munimji's approval"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"trip":       trip,
@@ -140,9 +148,22 @@ func (h *TripHandler) GetTrip(c *gin.Context) {
 }
 
 func (h *TripHandler) ListMembers(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userID := userIDVal.(int64)
+
 	var req types.TripDetailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	trip, membership, err := h.tripService.GetTripDetail(c.Request.Context(), req.TripID, userID)
+	if err != nil || trip == nil || ((membership == nil || membership.Status != models.MembershipActive) && trip.CreatedBy != userID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: only active members can view expedition members"})
 		return
 	}
 
@@ -193,7 +214,7 @@ func (h *TripHandler) ListEligibleUsers(c *gin.Context) {
 
 	// Verify requester has access to trip
 	trip, member, err := h.tripService.GetTripDetail(c.Request.Context(), req.TripID, userID)
-	if err != nil || trip == nil || member == nil {
+	if err != nil || trip == nil || ((member == nil || member.Role != models.RoleMunimji) && trip.CreatedBy != userID) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied to expedition"})
 		return
 	}
@@ -269,9 +290,22 @@ func (h *TripHandler) DeleteTrip(c *gin.Context) {
 }
 
 func (h *TripHandler) GetSettlement(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userID := userIDVal.(int64)
+
 	var req types.TripDetailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	trip, membership, err := h.tripService.GetTripDetail(c.Request.Context(), req.TripID, userID)
+	if err != nil || trip == nil || ((membership == nil || membership.Status != models.MembershipActive) && trip.CreatedBy != userID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: only active members can view settlement calculations"})
 		return
 	}
 
@@ -411,4 +445,111 @@ func (h *TripHandler) UpdateMemberRole(c *gin.Context) {
 		"message": fmt.Sprintf("Member role successfully updated to %s", roleName),
 		"role":    req.Role,
 	})
+}
+
+func (h *TripHandler) GetInviteInfo(c *gin.Context) {
+	code := c.Query("code")
+	if code == "" {
+		var req struct {
+			Code string `json:"code"`
+		}
+		if err := c.ShouldBindJSON(&req); err == nil && req.Code != "" {
+			code = req.Code
+		}
+	}
+
+	if code == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invite code is required"})
+		return
+	}
+
+	var currentUserID int64
+	if userIDVal, exists := c.Get("user_id"); exists {
+		if uid, ok := userIDVal.(int64); ok {
+			currentUserID = uid
+		}
+	}
+
+	info, err := h.tripService.GetInviteInfo(c.Request.Context(), code, currentUserID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, info)
+}
+
+func (h *TripHandler) RespondInviteLink(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userID := userIDVal.(int64)
+
+	var req types.RespondInviteLinkRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	msg, err := h.tripService.RespondInviteLink(c.Request.Context(), userID, req.InviteCode, req.Action)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": msg, "action": req.Action})
+}
+
+func (h *TripHandler) ListJoinRequests(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userID := userIDVal.(int64)
+
+	var req types.TripDetailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	requests, err := h.tripService.ListJoinRequests(c.Request.Context(), userID, req.TripID)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	}
+	if requests == nil {
+		requests = []models.TripMember{}
+	}
+
+	c.JSON(http.StatusOK, requests)
+}
+
+func (h *TripHandler) DecideJoinRequest(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userID := userIDVal.(int64)
+
+	var req types.JoinRequestDecisionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.tripService.DecideJoinRequest(c.Request.Context(), userID, req.TripID, req.UserID, req.Action); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	msg := "Join request approved successfully"
+	if req.Action == "reject" {
+		msg = "Join request rejected"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": msg, "action": req.Action})
 }

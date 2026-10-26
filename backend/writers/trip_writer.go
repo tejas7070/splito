@@ -20,13 +20,13 @@ func NewTripWriter(db *sql.DB) *TripWriter {
 
 func (w *TripWriter) CreateTripTx(ctx context.Context, tx *sql.Tx, trip *models.Trip) (int64, error) {
 	query := `
-		INSERT INTO trips (name, start_location, start_latitude, start_longitude, destination, destination_latitude, destination_longitude, start_date, end_date, estimated_budget, created_by, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO trips (name, start_location, start_latitude, start_longitude, destination, destination_latitude, destination_longitude, start_date, end_date, estimated_budget, created_by, status, invite_code)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	res, err := tx.ExecContext(ctx, query,
 		trip.Name, trip.StartLocation, trip.StartLatitude, trip.StartLongitude,
 		trip.Destination, trip.DestLatitude, trip.DestLongitude, trip.StartDate, trip.EndDate,
-		trip.EstimatedBudget, trip.CreatedBy, trip.Status,
+		trip.EstimatedBudget, trip.CreatedBy, trip.Status, trip.InviteCode,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert trip: %w", err)
@@ -148,7 +148,6 @@ func (w *TripWriter) RespondInvitation(ctx context.Context, tripID, userID int64
 
 	return tx.Commit()
 }
-
 func (w *TripWriter) UpdateMemberStatusTx(ctx context.Context, tx *sql.Tx, tripID, userID int64, status models.MembershipStatus) error {
 	query := `
 		UPDATE trip_members 
@@ -275,4 +274,46 @@ func (w *TripWriter) DeleteTrip(ctx context.Context, tripID int64) error {
 	}
 
 	return tx.Commit()
+}
+
+func (w *TripWriter) UpsertJoinRequest(ctx context.Context, tripID, userID int64, status models.MembershipStatus) error {
+	query := `
+		INSERT INTO trip_members (trip_id, user_id, role, status, joined_at)
+		VALUES (?, ?, 'participant', ?, NULL)
+		ON DUPLICATE KEY UPDATE status = VALUES(status)
+	`
+	_, err := w.db.ExecContext(ctx, query, tripID, userID, status)
+	if err != nil {
+		return fmt.Errorf("failed to save join request: %w", err)
+	}
+	return nil
+}
+
+func (w *TripWriter) SetJoinRequestDecision(ctx context.Context, tripID, userID int64, action string) error {
+	var query string
+	if action == "approve" {
+		query = `
+			UPDATE trip_members
+			SET status = 'active', joined_at = NOW(), removal_reason = NULL, removed_by = NULL, removed_at = NULL
+			WHERE trip_id = ? AND user_id = ? AND status = 'requested'
+		`
+	} else {
+		query = `
+			UPDATE trip_members
+			SET status = 'rejected'
+			WHERE trip_id = ? AND user_id = ? AND status = 'requested'
+		`
+	}
+	res, err := w.db.ExecContext(ctx, query, tripID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update join request decision: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errors.New("no pending join request found for this user")
+	}
+	return nil
 }

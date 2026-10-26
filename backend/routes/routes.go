@@ -38,6 +38,10 @@ func RegisterRoutes(
 		auth.POST("/otp/verify", authHandler.VerifyOTP)
 	}
 
+	// Shareable invite link info (Supports both public preview and authenticated session check)
+	r.GET("/trips/invite-info", middlewares.OptionalAuthMiddleware(cfg), tripHandler.GetInviteInfo)
+	r.POST("/trips/invite-info", middlewares.OptionalAuthMiddleware(cfg), tripHandler.GetInviteInfo)
+
 	// Protected routes (All IDs passed strictly in request body JSON)
 	protected := r.Group("")
 	protected.Use(middlewares.AuthMiddleware(cfg))
@@ -74,6 +78,9 @@ func RegisterRoutes(
 			trips.POST("/invitation/respond", tripHandler.RespondInvitation)
 			trips.POST("/invitations/list", tripHandler.ListInvitations)
 			trips.POST("/invitations/my-pending", tripHandler.ListMyPendingInvitations)
+			trips.POST("/invite-respond", tripHandler.RespondInviteLink)
+			trips.POST("/members/requests", tripHandler.ListJoinRequests)
+			trips.POST("/members/request-decision", tripHandler.DecideJoinRequest)
 		}
 
 		protected.GET("/locations/search", locationHandler.Search)

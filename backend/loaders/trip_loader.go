@@ -21,7 +21,7 @@ func (l *TripLoader) GetByID(ctx context.Context, id int64) (*models.Trip, error
 	query := `
 		SELECT id, name, start_location, start_latitude, start_longitude,
 		       destination, destination_latitude, destination_longitude,
-		       start_date, end_date, estimated_budget, created_by, status, created_at, updated_at
+		       start_date, end_date, estimated_budget, created_by, status, COALESCE(invite_code, ''), created_at, updated_at
 		FROM trips WHERE id = ?
 	`
 	row := l.db.QueryRowContext(ctx, query, id)
@@ -31,7 +31,7 @@ func (l *TripLoader) GetByID(ctx context.Context, id int64) (*models.Trip, error
 		&trip.ID, &trip.Name, &trip.StartLocation, &trip.StartLatitude, &trip.StartLongitude,
 		&trip.Destination, &trip.DestLatitude, &trip.DestLongitude,
 		&trip.StartDate, &trip.EndDate, &trip.EstimatedBudget,
-		&trip.CreatedBy, &trip.Status, &trip.CreatedAt, &trip.UpdatedAt,
+		&trip.CreatedBy, &trip.Status, &trip.InviteCode, &trip.CreatedAt, &trip.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -80,20 +80,20 @@ func (l *TripLoader) ListTripStops(ctx context.Context, tripID int64) ([]models.
 func (l *TripLoader) ListUserTrips(ctx context.Context, userID int64, email string) ([]models.Trip, error) {
 	query := `
 		SELECT t.id, t.name, t.start_location, t.destination, t.start_date, t.end_date,
-		       t.estimated_budget, t.created_by, t.status, t.created_at, t.updated_at,
-		       COALESCE(tm.role, ti.role, 'participant') AS user_role,
-		       COALESCE(tm.status, IF(ti.status = 'pending', 'invited', ti.status), 'invited') AS user_status
+		       t.estimated_budget, t.created_by, t.status, COALESCE(t.invite_code, ''), t.created_at, t.updated_at,
+		       COALESCE(tm.role, ti.role, IF(t.created_by = ?, 'munimji', 'participant')) AS user_role,
+		       COALESCE(tm.status, IF(ti.status = 'pending', 'invited', ti.status), IF(t.created_by = ?, 'active', 'invited')) AS user_status
 		FROM trips t
-		LEFT JOIN trip_members tm ON tm.trip_id = t.id AND tm.user_id = ? AND tm.status = 'active'
+		LEFT JOIN trip_members tm ON tm.trip_id = t.id AND tm.user_id = ? AND tm.status IN ('active', 'requested', 'invited')
 		LEFT JOIN trip_invitations ti ON ti.trip_id = t.id AND LOWER(ti.invitee_email) = LOWER(?) AND ti.status = 'pending'
-		WHERE tm.user_id IS NOT NULL OR ti.id IS NOT NULL
+		WHERE tm.user_id IS NOT NULL OR ti.id IS NOT NULL OR t.created_by = ?
 		GROUP BY t.id, t.name, t.start_location, t.destination, t.start_date, t.end_date,
-		         t.estimated_budget, t.created_by, t.status, t.created_at, t.updated_at,
-		         COALESCE(tm.role, ti.role, 'participant'),
-		         COALESCE(tm.status, IF(ti.status = 'pending', 'invited', ti.status), 'invited')
+		         t.estimated_budget, t.created_by, t.status, t.invite_code, t.created_at, t.updated_at,
+		         COALESCE(tm.role, ti.role, IF(t.created_by = ?, 'munimji', 'participant')),
+		         COALESCE(tm.status, IF(ti.status = 'pending', 'invited', ti.status), IF(t.created_by = ?, 'active', 'invited'))
 		ORDER BY t.created_at DESC
 	`
-	rows, err := l.db.QueryContext(ctx, query, userID, email)
+	rows, err := l.db.QueryContext(ctx, query, userID, userID, userID, email, userID, userID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list user trips: %w", err)
 	}
@@ -105,7 +105,7 @@ func (l *TripLoader) ListUserTrips(ctx context.Context, userID int64, email stri
 		err := rows.Scan(
 			&t.ID, &t.Name, &t.StartLocation, &t.Destination,
 			&t.StartDate, &t.EndDate, &t.EstimatedBudget,
-			&t.CreatedBy, &t.Status, &t.CreatedAt, &t.UpdatedAt,
+			&t.CreatedBy, &t.Status, &t.InviteCode, &t.CreatedAt, &t.UpdatedAt,
 			&t.UserRole, &t.UserStatus,
 		)
 		if err != nil {
@@ -206,6 +206,75 @@ func (l *TripLoader) ListTripInvitations(ctx context.Context, tripID int64) ([]m
 		invitations = append(invitations, inv)
 	}
 	return invitations, nil
+}
+
+func (l *TripLoader) GetByInviteCode(ctx context.Context, inviteCode string) (*models.Trip, error) {
+	query := `
+		SELECT id, name, start_location, start_latitude, start_longitude,
+		       destination, destination_latitude, destination_longitude,
+		       start_date, end_date, estimated_budget, created_by, status, COALESCE(invite_code, ''), created_at, updated_at
+		FROM trips WHERE invite_code = ?
+	`
+	row := l.db.QueryRowContext(ctx, query, inviteCode)
+
+	trip := &models.Trip{}
+	err := row.Scan(
+		&trip.ID, &trip.Name, &trip.StartLocation, &trip.StartLatitude, &trip.StartLongitude,
+		&trip.Destination, &trip.DestLatitude, &trip.DestLongitude,
+		&trip.StartDate, &trip.EndDate, &trip.EstimatedBudget,
+		&trip.CreatedBy, &trip.Status, &trip.InviteCode, &trip.CreatedAt, &trip.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get trip by invite code: %w", err)
+	}
+	trip.Title = trip.Name
+	trip.StartPoint = trip.StartLocation
+	trip.StartAt = trip.StartDate
+	trip.EndAt = trip.EndDate
+	stops, err := l.ListTripStops(ctx, trip.ID)
+	if err != nil {
+		return nil, err
+	}
+	trip.Stops = stops
+	return trip, nil
+}
+
+func (l *TripLoader) ListJoinRequests(ctx context.Context, tripID int64) ([]models.TripMember, error) {
+	query := `
+		SELECT tm.id, tm.trip_id, tm.user_id, COALESCE(u.name, 'User'), COALESCE(u.email, ''),
+		       tm.role, tm.status, tm.joined_at, tm.created_at
+		FROM trip_members tm
+		LEFT JOIN user_details u ON u.id = tm.user_id
+		WHERE tm.trip_id = ? AND tm.status = 'requested'
+		ORDER BY tm.created_at DESC
+	`
+	rows, err := l.db.QueryContext(ctx, query, tripID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list join requests: %w", err)
+	}
+	defer rows.Close()
+
+	var requests []models.TripMember
+	for rows.Next() {
+		var m models.TripMember
+		if err := rows.Scan(&m.ID, &m.TripID, &m.UserID, &m.UserName, &m.Email, &m.Role, &m.Status, &m.JoinedAt, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan join request: %w", err)
+		}
+		requests = append(requests, m)
+	}
+	return requests, nil
+}
+
+func (l *TripLoader) GetActiveMemberCount(ctx context.Context, tripID int64) (int, error) {
+	var count int
+	err := l.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM trip_members WHERE trip_id = ? AND status = 'active'`, tripID).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (l *TripLoader) ListUserPendingInvitations(ctx context.Context, email string) ([]models.TripInvitation, error) {

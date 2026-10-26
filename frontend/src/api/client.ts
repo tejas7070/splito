@@ -22,10 +22,22 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Don't redirect if on public pages like landing (/), login, register, forgot-password
+      // 1. Never redirect on probe/session-check calls like /auth/me or public invite info
+      const requestUrl = error.config?.url || '';
+      if (requestUrl.includes('/auth/me') || requestUrl.includes('/trips/invite-info')) {
+        return Promise.reject(error);
+      }
+
+      // 2. Don't redirect if on public pages like landing (/), login, register, forgot-password, or invite link (/invite/...)
       const path = window.location.pathname;
-      const publicPaths = ['/', '/login', '/register', '/forgot-password'];
-      if (!publicPaths.includes(path)) {
+      const isPublicPath = 
+        path === '/' || 
+        path.startsWith('/login') || 
+        path.startsWith('/register') || 
+        path.startsWith('/forgot-password') || 
+        path.startsWith('/invite');
+
+      if (!isPublicPath) {
         localStorage.removeItem('auth_token');
         localStorage.removeItem('token');
         localStorage.removeItem('user');

@@ -240,3 +240,30 @@ type TripSettlementResponse struct {
 	Balances            []ParticipantBalance      `json:"balances"`
 	Transfers           []SettlementTransfer      `json:"transfers"`
 }
+
+type InviteInfoResponse struct {
+	TripID          int64     `json:"trip_id"`
+	InviteCode      string    `json:"invite_code"`
+	Title           string    `json:"title"`
+	StartPoint      string    `json:"start_point"`
+	Destination     string    `json:"destination"`
+	StartAt         time.Time `json:"start_at"`
+	EndAt           time.Time `json:"end_at"`
+	EstimatedBudget float64   `json:"estimated_budget"`
+	MunimjiName     string    `json:"munimji_name"`
+	MunimjiEmail    string    `json:"munimji_email"`
+	MemberCount     int       `json:"member_count"`
+	UserStatus      string    `json:"user_status"` // "", "requested", "active", "rejected"
+	IsMunimji       bool      `json:"is_munimji"`
+}
+
+type RespondInviteLinkRequest struct {
+	InviteCode string `json:"invite_code" binding:"required"`
+	Action     string `json:"action" binding:"required"` // "request" or "reject"
+}
+
+type JoinRequestDecisionRequest struct {
+	TripID int64  `json:"trip_id" binding:"required"`
+	UserID int64  `json:"user_id" binding:"required"`
+	Action string `json:"action" binding:"required"` // "approve" or "reject"
+}
