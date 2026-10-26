@@ -55,7 +55,7 @@ const forgotConfirmPassword = ref('');
 const forgotResendCooldown = ref(0);
 let forgotTimer: number | null = null;
 
-const hasInviteQuery = computed(() => !!route.query.invite_trip);
+const hasInviteQuery = computed(() => !!route.query.invite_trip || !!route.query.invite_code);
 
 const startRegCooldown = (seconds = 30) => {
   regResendCooldown.value = seconds;
@@ -97,6 +97,13 @@ const syncModeWithRoute = () => {
 
 onMounted(() => {
   syncModeWithRoute();
+  const qInvite = (route.query.invite_code as string) || (route.query.code as string);
+  if (qInvite) {
+    try {
+      sessionStorage.setItem('splito_invite_code', qInvite);
+      localStorage.setItem('splito_pending_invite', qInvite);
+    } catch (_) {}
+  }
   if (typeof (window as any).google !== 'undefined' && (window as any).google?.accounts?.id && googleClientId) {
     try {
       (window as any).google.accounts.id.initialize({
@@ -129,6 +136,11 @@ const switchMode = (target: 'login' | 'register' | 'forgot') => {
 };
 
 const navigateToApp = () => {
+  const inviteCode = (route.query.invite_code as string) || (route.query.code as string) || sessionStorage.getItem('splito_invite_code') || localStorage.getItem('splito_pending_invite');
+  if (inviteCode) {
+    router.push(`/invite/${inviteCode}`);
+    return;
+  }
   const inviteTrip = route.query.invite_trip;
   const inviteToken = route.query.invite_token;
   if (inviteTrip) {

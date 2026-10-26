@@ -112,6 +112,17 @@ func ensureTripLocationSchema(db *sql.DB) error {
 }
 
 func ensureSchemaMigrations(db *sql.DB) {
+	// Support shareable invite_code in trips table
+	var inviteColExists int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trips' AND COLUMN_NAME = 'invite_code'`).Scan(&inviteColExists)
+	if inviteColExists == 0 {
+		_, _ = db.Exec(`ALTER TABLE trips ADD COLUMN invite_code VARCHAR(64) NULL;`)
+		_, _ = db.Exec(`CREATE UNIQUE INDEX idx_trips_invite_code ON trips (invite_code);`)
+	}
+	_, _ = db.Exec(`UPDATE trips SET invite_code = CONCAT('splito_', SUBSTRING(MD5(CONCAT(id, NOW(), RAND())), 1, 12)) WHERE invite_code IS NULL OR invite_code = '';`)
+
+	// Support 'requested' status in trip_members for invite link join requests
+	_, _ = db.Exec(`ALTER TABLE trip_members MODIFY COLUMN status ENUM('invited', 'active', 'rejected', 'left', 'removed', 'requested') NOT NULL DEFAULT 'invited';`)
 	// Support 'archived' status in trips table
 	_, _ = db.Exec(`ALTER TABLE trips MODIFY COLUMN status ENUM('planned', 'active', 'completed', 'cancelled', 'archived') NOT NULL DEFAULT 'planned';`)
 

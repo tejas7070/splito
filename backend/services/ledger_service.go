@@ -39,6 +39,19 @@ func NewLedgerService(
 	}
 }
 
+// EnsureActiveMembership verifies that a user is an active member or creator of the trip
+func (s *LedgerService) EnsureActiveMembership(ctx context.Context, tripID, userID int64) error {
+	membership, err := s.tripLoader.GetUserMembership(ctx, tripID, userID)
+	if err == nil && membership != nil && membership.Status == models.MembershipActive {
+		return nil
+	}
+	trip, tripErr := s.tripLoader.GetByID(ctx, tripID)
+	if tripErr == nil && trip != nil && trip.CreatedBy == userID {
+		return nil
+	}
+	return errors.New("must be an active member of the trip to access ledger")
+}
+
 // CreateClaim submits a peer out-of-pocket expense claim
 func (s *LedgerService) CreateClaim(ctx context.Context, userID int64, req *types.CreateClaimRequest) (*models.ExpenseClaim, error) {
 	membership, err := s.tripLoader.GetUserMembership(ctx, req.TripID, userID)

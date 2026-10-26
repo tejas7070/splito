@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
 import { useToast } from '../stores/toast';
-import { tripService, claimService, accountingService, type Trip, type DashboardSummary, type TripInvitation, type EligibleUser, type PlaceSuggestion } from '../api/services';
+import { tripService, claimService, accountingService, type Trip, type DashboardSummary, type TripInvitation, type EligibleUser, type PlaceSuggestion, type TripMember } from '../api/services';
 import { useOfflineSync } from '../services/offlineSync';
 import appFavicon from '../assets/favicon.png';
 import LocationAutocomplete from '../components/LocationAutocomplete.vue';
@@ -694,6 +694,84 @@ const loadInvitations = async (tripId: number) => {
   }
 };
 
+const joinRequestsList = ref<TripMember[]>([]);
+const decidingRequestId = ref<number | null>(null);
+
+const loadJoinRequests = async (tripId: number) => {
+  try {
+    const res = await tripService.listJoinRequests(tripId);
+    joinRequestsList.value = res.data || [];
+  } catch (err) {
+    joinRequestsList.value = [];
+  }
+};
+
+const handleDecideJoinRequest = async (targetUserId: number, action: 'approve' | 'reject') => {
+  if (!selectedTrip.value) return;
+  decidingRequestId.value = targetUserId;
+  try {
+    await tripService.decideJoinRequest({
+      trip_id: selectedTrip.value.id,
+      user_id: targetUserId,
+      action
+    });
+    if (action === 'approve') {
+      toast.success('Member request approved! Welcome email dispatched.');
+    } else {
+      toast.info('Join request declined.');
+    }
+    await Promise.all([
+      loadMembers(selectedTrip.value.id),
+      loadJoinRequests(selectedTrip.value.id)
+    ]);
+  } catch (err: any) {
+    toast.error(err.response?.data?.error || `Failed to ${action} request`);
+  } finally {
+    decidingRequestId.value = null;
+  }
+};
+
+const copiedLinkCode = ref<string | null>(null);
+
+const getTripInviteUrl = (inviteCode?: string) => {
+  if (!inviteCode) return '';
+  const base = window.location.origin.includes('localhost')
+    ? 'https://splito-alpha.vercel.app'
+    : window.location.origin;
+  return `${base}/invite/${inviteCode}`;
+};
+
+const copyInviteLink = async (inviteCode?: string) => {
+  if (!inviteCode) return;
+  const url = getTripInviteUrl(inviteCode);
+  try {
+    await navigator.clipboard.writeText(url);
+    copiedLinkCode.value = inviteCode;
+    toast.success('Invite link copied to clipboard!');
+    setTimeout(() => {
+      if (copiedLinkCode.value === inviteCode) {
+        copiedLinkCode.value = null;
+      }
+    }, 3000);
+  } catch (err) {
+    toast.error('Failed to copy link to clipboard');
+  }
+};
+
+const getWhatsAppShareUrl = (trip: Trip) => {
+  const url = getTripInviteUrl(trip.invite_code);
+  const tripName = trip.title || trip.name || 'Expedition';
+  const message = [
+    `🎒 *Trip Invitation: ${tripName}*`,
+    ``,
+    `Hey! You\'ve been invited to join our expedition *${tripName}* on *Splito* 🗺️`,
+    ``,
+    `👉 *Tap to join:*`,
+    url
+  ].join('\n');
+  return `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+};
+
 const myPendingInvitations = ref<TripInvitation[]>([]);
 
 const loadMyPendingInvitations = async () => {
@@ -1305,23 +1383,34 @@ const loadTrips = async (autoSelect: boolean = true) => {
       return;
     }
 
-    const inviteTripId = route.query.invite_trip ? Number(route.query.invite_trip) : null;
+    const inviteTripId = route.query.invite_trip ? Number(route.query.invite_trip) : (route.query.trip ? Number(route.query.trip) : null);
     const targetTrip = inviteTripId ? trips.value.find(t => t.id === inviteTripId) : null;
 
-    if (targetTrip) {
+    if (targetTrip && targetTrip.user_status !== 'requested') {
       await selectTrip(targetTrip);
+      if (route.query.tab && ['ledger', 'claims', 'members', 'settlement'].includes(route.query.tab as string)) {
+        activeTab.value = route.query.tab as any;
+      }
     } else if (trips.value.length > 0) {
       if (selectedTrip.value) {
         const current = trips.value.find(t => t.id === selectedTrip.value?.id);
-        if (current) {
+        if (current && current.user_status !== 'requested') {
           await selectTrip(current);
         } else {
-          const active = trips.value.find(t => t.user_status !== 'invited');
-          await selectTrip(active || trips.value[0]);
+          const active = trips.value.find(t => t.user_status !== 'invited' && t.user_status !== 'requested');
+          if (active) {
+            await selectTrip(active);
+          } else {
+            selectedTrip.value = null;
+          }
         }
       } else {
-        const active = trips.value.find(t => t.user_status !== 'invited');
-        await selectTrip(active || trips.value[0]);
+        const active = trips.value.find(t => t.user_status !== 'invited' && t.user_status !== 'requested');
+        if (active) {
+          await selectTrip(active);
+        } else {
+          selectedTrip.value = null;
+        }
       }
     } else {
       selectedTrip.value = null;
@@ -1335,24 +1424,27 @@ const loadTrips = async (autoSelect: boolean = true) => {
 
 
 const selectTrip = async (trip: Trip) => {
+  if (trip.user_status === 'requested') {
+    toast.warn('Your request to join this expedition is pending approval by Munimji.');
+    return;
+  }
   isCreatingTrip.value = false;
   mobileSidebarOpen.value = false;
   try {
     const detail = await tripService.getDetail(trip.id);
-    const loadedTrip = detail.data.trip;
-    if (detail.data.membership) {
-      loadedTrip.user_role = detail.data.membership.role;
-      loadedTrip.user_status = detail.data.membership.status;
-    } else if (loadedTrip.created_by === authStore.user?.id) {
-      loadedTrip.user_role = 'munimji';
-      loadedTrip.user_status = 'active';
-    }
-    selectedTrip.value = loadedTrip;
+    selectedTrip.value = {
+      ...detail.data.trip,
+      user_role: detail.data.membership?.role || detail.data.trip?.user_role || trip.user_role || (detail.data.trip?.created_by === authStore.user?.id ? 'munimji' : 'participant'),
+      user_status: detail.data.membership?.status || detail.data.trip?.user_status || trip.user_status || (detail.data.trip?.created_by === authStore.user?.id ? 'active' : 'active'),
+    };
     const res = await tripService.getDashboard(trip.id);
     dashboard.value = res.data;
     await loadClaims(trip.id);
     await loadMembers(trip.id);
     await loadInvitations(trip.id);
+    if (selectedTrip.value.user_role === 'munimji' || detail.data.membership?.role === 'munimji' || selectedTrip.value.created_by === authStore.user?.id) {
+      await loadJoinRequests(trip.id);
+    }
     await loadLedgerRecords(trip.id);
     await loadSettlement(trip.id);
   } catch (err) {
@@ -1717,12 +1809,12 @@ onMounted(async () => {
 
         <div class="sidebar-top">
           <span class="sidebar-label">ACTIVE TRIPS</span>
-          <span class="nav-count-pill">{{ trips.filter(t => t.user_status !== 'invited').length }}</span>
+          <span class="nav-count-pill">{{ trips.filter(t => t.user_status !== 'invited' && t.user_status !== 'requested').length }}</span>
         </div>
 
         <div class="trip-items-scroll">
           <div 
-            v-for="trip in trips.filter(t => t.user_status !== 'invited')" 
+            v-for="trip in trips.filter(t => t.user_status !== 'invited' && t.user_status !== 'requested')" 
             :key="trip.id"
             @click="selectTrip(trip)"
             :class="['trip-neu-item', { active: selectedTrip?.id === trip.id }]"
@@ -1736,7 +1828,7 @@ onMounted(async () => {
             </div>
           </div>
 
-          <div v-if="trips.filter(t => t.user_status !== 'invited').length === 0" class="sidebar-empty-trips">
+          <div v-if="trips.filter(t => t.user_status !== 'invited' && t.user_status !== 'requested').length === 0" class="sidebar-empty-trips">
             <span>No active expeditions yet.</span>
           </div>
         </div>
@@ -2414,6 +2506,42 @@ onMounted(async () => {
               </div>
             </div>
 
+            <div class="success-invite-link-card" v-if="createdTripResult.invite_code">
+              <div class="invite-card-header">
+                <i class="pi pi-link text-sky-400"></i>
+                <div class="header-text">
+                  <span class="invite-kicker">SHAREABLE EXPEDITION LINK</span>
+                  <span class="invite-sub">Share this link to invite participants. Requesters will appear in your Members tab for approval.</span>
+                </div>
+              </div>
+              <div class="invite-input-row">
+                <input 
+                  type="text" 
+                  readonly 
+                  :value="getTripInviteUrl(createdTripResult.invite_code)" 
+                  class="invite-link-input"
+                />
+                <Button 
+                  @click="copyInviteLink(createdTripResult.invite_code)" 
+                  :icon="copiedLinkCode === createdTripResult.invite_code ? 'pi pi-check' : 'pi pi-copy'" 
+                  :label="copiedLinkCode === createdTripResult.invite_code ? 'Copied!' : 'Copy Link'" 
+                  :severity="copiedLinkCode === createdTripResult.invite_code ? 'success' : 'primary'"
+                  size="small"
+                />
+              </div>
+              <div class="quick-share-buttons">
+                <a 
+                  :href="getWhatsAppShareUrl(createdTripResult)" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  class="share-pill whatsapp"
+                >
+                  <i class="pi pi-whatsapp"></i>
+                  <span>Share via WhatsApp</span>
+                </a>
+              </div>
+            </div>
+
             <div class="success-actions-row">
               <Button 
                 @click="handleRedirectToCreatedTrip" 
@@ -2898,6 +3026,92 @@ onMounted(async () => {
               size="small" 
               rounded 
             />
+          </div>
+
+          <!-- Shareable Invite Link Banner for Munimji -->
+          <div class="members-invite-banner" v-if="isMunimji && selectedTrip.invite_code">
+            <div class="banner-left">
+              <div class="banner-icon-badge">
+                <i class="pi pi-link"></i>
+              </div>
+              <div class="banner-text">
+                <span class="banner-kicker">EXPEDITION INVITE LINK</span>
+                <p class="banner-desc">Share this link with anyone to allow them to request to join this expedition.</p>
+              </div>
+            </div>
+            <div class="banner-right">
+              <input 
+                type="text" 
+                readonly 
+                :value="getTripInviteUrl(selectedTrip.invite_code)" 
+                class="banner-link-input"
+              />
+              <Button 
+                @click="copyInviteLink(selectedTrip.invite_code)" 
+                :icon="copiedLinkCode === selectedTrip.invite_code ? 'pi pi-check' : 'pi pi-copy'" 
+                :label="copiedLinkCode === selectedTrip.invite_code ? 'Copied!' : 'Copy'" 
+                :severity="copiedLinkCode === selectedTrip.invite_code ? 'success' : 'secondary'"
+                outlined
+                size="small"
+                class="btn-banner-copy"
+              />
+              <a 
+                :href="getWhatsAppShareUrl(selectedTrip)" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                class="share-pill whatsapp"
+              >
+                <i class="pi pi-whatsapp"></i>
+                <span>WhatsApp</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Section: Pending Join Requests (Munimji Only) -->
+          <div class="members-sub-section pending-join-requests-section" v-if="isMunimji && joinRequestsList.length > 0">
+            <h4 class="sub-deck-title brand-font text-amber-400">
+              <i class="pi pi-clock mr-1"></i> Join Requests Pending Review ({{ joinRequestsList.length }})
+            </h4>
+            <span class="sub-deck-subtitle">People who requested to join via your shared expedition link.</span>
+            <div class="members-grid-stack">
+              <div 
+                v-for="req in joinRequestsList" 
+                :key="'join-req-' + req.id" 
+                class="member-neu-card join-request-card"
+              >
+                <div class="member-info">
+                  <div class="member-header">
+                    <span class="member-name brand-font">{{ req.user_name || req.email?.split('@')[0] || 'User' }}</span>
+                    <Tag value="Requested to Join" severity="warn" icon="pi pi-clock" rounded />
+                  </div>
+                  <span class="member-email">{{ req.email }}</span>
+                </div>
+                <div class="member-card-footer">
+                  <span class="member-join-date mono-num">
+                    {{ req.joined_at ? `Requested ${new Date(req.joined_at).toLocaleDateString()}` : 'Awaiting Approval' }}
+                  </span>
+                  <div class="member-actions-row">
+                    <Button 
+                      @click="handleDecideJoinRequest(req.user_id, 'approve')" 
+                      :loading="decidingRequestId === req.user_id" 
+                      label="Approve" 
+                      icon="pi pi-check" 
+                      severity="success" 
+                      size="small" 
+                    />
+                    <Button 
+                      @click="handleDecideJoinRequest(req.user_id, 'reject')" 
+                      :loading="decidingRequestId === req.user_id" 
+                      label="Decline" 
+                      icon="pi pi-times" 
+                      severity="danger" 
+                      size="small" 
+                      outlined 
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Section 1: Active Participants -->
@@ -4383,6 +4597,18 @@ html.dark .popover-menu-btn:hover {
   gap: 10px;
   max-height: 240px;
   overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border, rgba(125, 133, 146, 0.25)) transparent;
+}
+
+.trip-items-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.trip-items-scroll::-webkit-scrollbar-thumb {
+  background: var(--border, rgba(125, 133, 146, 0.25));
+  border-radius: 4px;
 }
 
 /* Sidebar Section Navigation */
@@ -9336,4 +9562,228 @@ html.dark .neu-table td {
   }
 }
 
+/* Invite Link & Join Requests styles */
+.success-invite-link-card {
+  width: 100%;
+  max-width: 540px;
+  background: var(--surface);
+  box-shadow: var(--shadow-flat);
+  border: 1px solid var(--border, rgba(125, 133, 146, 0.2));
+  border-radius: 18px;
+  padding: 20px 24px;
+  margin: 18px 0 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+}
+
+.invite-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.invite-card-header i {
+  font-size: 20px;
+  margin-top: 2px;
+}
+
+.invite-card-header .header-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.invite-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--accent, #06b6d4);
+  text-transform: uppercase;
+}
+
+.invite-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.invite-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.invite-link-input {
+  flex: 1;
+  background: var(--surface);
+  box-shadow: var(--shadow-inset);
+  border: 1px solid var(--border, rgba(125, 133, 146, 0.2));
+  color: var(--text-main);
+  padding: 0 14px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-family: var(--mono, monospace);
+  outline: none;
+}
+
+.invite-link-input:focus {
+  border-color: var(--accent, #06b6d4);
+}
+
+.quick-share-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.share-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.share-pill.whatsapp {
+  background: #25d366;
+  color: #ffffff !important;
+  border: none;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.25);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.share-pill.whatsapp:hover {
+  background: #20ba5a;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(37, 211, 102, 0.35);
+}
+
+.members-invite-banner {
+  background: var(--surface);
+  box-shadow: var(--shadow-flat);
+  border: 1px solid var(--border, rgba(125, 133, 146, 0.2));
+  border-radius: 18px;
+  padding: 16px 22px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.banner-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1 1 240px;
+}
+
+.banner-icon-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(6, 182, 212, 0.12);
+  color: var(--accent, #06b6d4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-flat-sm);
+}
+
+.banner-text .banner-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--accent, #06b6d4);
+  text-transform: uppercase;
+}
+
+.banner-desc {
+  margin: 3px 0 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.banner-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 360px;
+  min-width: 280px;
+  max-width: 620px;
+}
+
+.banner-link-input {
+  flex: 1;
+  background: var(--surface);
+  box-shadow: var(--shadow-inset);
+  border: 1px solid var(--border, rgba(125, 133, 146, 0.2));
+  color: var(--text-main);
+  padding: 0 12px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-family: var(--mono, monospace);
+  outline: none;
+  min-width: 0;
+}
+
+.banner-link-input:focus {
+  border-color: var(--accent, #06b6d4);
+}
+
+.btn-banner-copy {
+  height: 38px !important;
+  border-radius: 10px !important;
+  padding: 0 14px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+}
+
+.pending-join-requests-section {
+  margin-bottom: 32px;
+}
+
+.pending-join-requests-section .sub-deck-subtitle {
+  display: block;
+  font-size: 13px;
+  color: #94a3b8;
+  margin-top: 2px;
+  margin-bottom: 14px;
+}
+
+.join-request-card {
+  border-left: 3px solid #f59e0b !important;
+}
+
+@media (max-width: 768px) {
+  .members-invite-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .banner-right {
+    max-width: 100%;
+  }
+}
 </style>

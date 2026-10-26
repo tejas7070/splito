@@ -82,6 +82,11 @@ func (s *TripService) CreateTrip(ctx context.Context, creatorUserID int64, req *
 		EstimatedBudget: req.EstimatedBudget,
 		Status:          models.TripStatusPlanned,
 		CreatedBy:       creatorUserID,
+		InviteCode:      fmt.Sprintf("splito_%s", func() string {
+			b := make([]byte, 6)
+			rand.Read(b)
+			return hex.EncodeToString(b)
+		}()),
 		Stops:           make([]models.TripStop, len(req.Stops)),
 	}
 	for i, stop := range req.Stops {
@@ -240,6 +245,20 @@ func (s *TripService) GetTripDetail(ctx context.Context, tripID, userID int64) (
 	} else if trip.CreatedBy == userID {
 		trip.UserRole = models.RoleMunimji
 		trip.UserStatus = models.MembershipActive
+	}
+
+	if member != nil {
+		trip.UserRole = member.Role
+		trip.UserStatus = member.Status
+	} else if trip.CreatedBy == userID {
+		trip.UserRole = models.RoleMunimji
+		trip.UserStatus = models.MembershipActive
+		member = &models.TripMember{
+			TripID: tripID,
+			UserID: userID,
+			Role:   models.RoleMunimji,
+			Status: models.MembershipActive,
+		}
 	}
 
 	return trip, member, nil
@@ -865,4 +884,312 @@ func (s *TripService) UpdateMemberRole(ctx context.Context, munimjiID int64, req
 	}
 
 	return s.tripWriter.UpdateMemberRole(ctx, req.TripID, req.UserID, targetRole)
+}
+
+func (s *TripService) GetInviteInfo(ctx context.Context, inviteCode string, currentUserID int64) (*types.InviteInfoResponse, error) {
+	trip, err := s.tripLoader.GetByInviteCode(ctx, inviteCode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query trip: %w", err)
+	}
+	if trip == nil {
+		return nil, errors.New("invitation link is invalid or expired")
+	}
+
+	var munimjiName, munimjiEmail string
+	_ = s.db.QueryRowContext(ctx, "SELECT name, email FROM user_details WHERE id = ?", trip.CreatedBy).Scan(&munimjiName, &munimjiEmail)
+
+	memberCount, _ := s.tripLoader.GetActiveMemberCount(ctx, trip.ID)
+
+	resp := &types.InviteInfoResponse{
+		TripID:          trip.ID,
+		InviteCode:      trip.InviteCode,
+		Title:           trip.Name,
+		StartPoint:      trip.StartLocation,
+		Destination:     trip.Destination,
+		StartAt:         trip.StartDate,
+		EndAt:           trip.EndDate,
+		EstimatedBudget: trip.EstimatedBudget,
+		MunimjiName:     munimjiName,
+		MunimjiEmail:    munimjiEmail,
+		MemberCount:     memberCount,
+		UserStatus:      "",
+		IsMunimji:       false,
+	}
+
+	if currentUserID > 0 {
+		if currentUserID == trip.CreatedBy {
+			resp.IsMunimji = true
+			resp.UserStatus = "active"
+		} else {
+			membership, err := s.tripLoader.GetUserMembership(ctx, trip.ID, currentUserID)
+			if err == nil && membership != nil {
+				resp.UserStatus = string(membership.Status)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+func (s *TripService) RespondInviteLink(ctx context.Context, userID int64, inviteCode, action string) (string, error) {
+	if action != "request" && action != "reject" {
+		return "", errors.New("invalid action, must be 'request' or 'reject'")
+	}
+
+	trip, err := s.tripLoader.GetByInviteCode(ctx, inviteCode)
+	if err != nil || trip == nil {
+		return "", errors.New("invitation link is invalid or expired")
+	}
+
+	if userID == trip.CreatedBy {
+		return "", errors.New("you are the Munimji of this trip")
+	}
+
+	existingMembership, _ := s.tripLoader.GetUserMembership(ctx, trip.ID, userID)
+	if existingMembership != nil {
+		if existingMembership.Status == models.MembershipActive {
+			return "", errors.New("you are already an active participant in this expedition")
+		}
+	}
+
+	userLoader := loaders.NewUserLoader(s.db)
+	user, err := userLoader.GetByID(ctx, userID)
+	if err != nil || user == nil {
+		return "", errors.New("user not found")
+	}
+
+	if action == "reject" {
+		if err := s.tripWriter.UpsertJoinRequest(ctx, trip.ID, userID, models.MembershipRejected); err != nil {
+			return "", err
+		}
+		return "Invitation declined.", nil
+	}
+
+	// action == "request"
+	if existingMembership != nil && existingMembership.Status == models.MembershipRequested {
+		return "Your request to join this trip has already been submitted and is pending Munimji's review.", nil
+	}
+
+	if err := s.tripWriter.UpsertJoinRequest(ctx, trip.ID, userID, models.MembershipRequested); err != nil {
+		return "", err
+	}
+
+	// Send notification email to Munimji
+	s.sendJoinRequestEmailToMunimji(trip, user)
+
+	return "Join request submitted. Munimji has been notified via email.", nil
+}
+
+func (s *TripService) sendJoinRequestEmailToMunimji(trip *models.Trip, requester *models.User) {
+	var munimjiEmail, munimjiName string
+	err := s.db.QueryRowContext(context.Background(), "SELECT email, name FROM user_details WHERE id = ?", trip.CreatedBy).Scan(&munimjiEmail, &munimjiName)
+	if err != nil || munimjiEmail == "" {
+		return
+	}
+
+	appBaseURL := "https://splito-alpha.vercel.app"
+	if s.cfg.AppEnv == "development" {
+		appBaseURL = "http://localhost:5173"
+	}
+	membersTabURL := fmt.Sprintf("%s/dashboard?trip=%d&tab=members", appBaseURL, trip.ID)
+	subject := fmt.Sprintf("New Join Request: %s wants to join \"%s\" on Splito", requester.Name, trip.Name)
+
+	htmlContent := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>New Join Request</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
+  <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%%" style="max-width:520px;background-color:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.06);">
+          <tr>
+            <td style="background-color:#0f172a;padding:28px 32px;text-align:left;">
+              <div style="display:inline-block;">
+                <span style="color:#ffffff;font-size:24px;font-weight:800;letter-spacing:-0.5px;">Splito</span>
+                <span style="color:#38bdf8;font-size:12px;margin-left:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;background:rgba(56,189,248,0.18);padding:3px 8px;border-radius:6px;">Join Request</span>
+              </div>
+              <p style="margin:6px 0 0 0;color:#94a3b8;font-size:12px;">Expedition Treasury Protocol</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 32px 24px 32px;">
+              <h1 style="margin:0 0 10px 0;font-size:20px;font-weight:700;color:#0f172a;">New Join Request Received</h1>
+              <p style="margin:0 0 20px 0;font-size:14px;line-height:1.6;color:#475569;">
+                Hello <strong>%s</strong>, a user has followed your invite link and requested to join your expedition <strong>%s</strong>.
+              </p>
+
+              <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;margin-bottom:24px;">
+                <tr>
+                  <td>
+                    <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Requester Details</div>
+                    <div style="font-size:16px;font-weight:700;color:#0f172a;margin:4px 0 2px 0;">%s</div>
+                    <div style="font-size:13px;color:#475569;margin-bottom:12px;">%s</div>
+
+                    <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Expedition</div>
+                    <div style="font-size:14px;font-weight:600;color:#0f172a;margin:2px 0 4px 0;">%s</div>
+                    <div style="font-size:13px;color:#475569;">Route: <strong>%s</strong> &rarr; <strong>%s</strong></div>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="margin:0 0 24px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="%s" style="display:inline-block;background-color:#2563eb;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:14px 28px;border-radius:10px;box-shadow:0 4px 12px rgba(37,99,235,0.25);">
+                      Review & Approve in Members Tab &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0;font-size:12px;color:#64748b;line-height:1.5;">
+                <em>Note:</em> Clicking the button will take you directly to the Members & Invite tab where you can approve or decline this request.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8fafc;border-top:1px solid #f1f5f9;padding:16px 32px;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#94a3b8;">
+                Splito • Group expenses, split with zero drama.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`, munimjiName, trip.Name, requester.Name, requester.Email, trip.Name, trip.StartLocation, trip.Destination, membersTabURL)
+
+	DispatchEmail(s.cfg, munimjiEmail, subject, htmlContent, "SPLITO JOIN REQUEST")
+}
+
+func (s *TripService) ListJoinRequests(ctx context.Context, munimjiID, tripID int64) ([]models.TripMember, error) {
+	trip, member, err := s.GetTripDetail(ctx, tripID, munimjiID)
+	if err != nil {
+		return nil, err
+	}
+	if trip == nil || member == nil || member.Role != models.RoleMunimji {
+		return nil, errors.New("only Munimji can view pending join requests")
+	}
+
+	return s.tripLoader.ListJoinRequests(ctx, tripID)
+}
+
+func (s *TripService) DecideJoinRequest(ctx context.Context, munimjiID, tripID, targetUserID int64, action string) error {
+	if action != "approve" && action != "reject" {
+		return errors.New("invalid action, must be 'approve' or 'reject'")
+	}
+
+	trip, member, err := s.GetTripDetail(ctx, tripID, munimjiID)
+	if err != nil {
+		return err
+	}
+	if trip == nil || member == nil || member.Role != models.RoleMunimji {
+		return errors.New("only Munimji can decide on join requests")
+	}
+
+	if err := s.tripWriter.SetJoinRequestDecision(ctx, tripID, targetUserID, action); err != nil {
+		return err
+	}
+
+	userLoader := loaders.NewUserLoader(s.db)
+	targetUser, err := userLoader.GetByID(ctx, targetUserID)
+	if err == nil && targetUser != nil {
+		s.sendJoinDecisionEmailToUser(trip, targetUser, member, action)
+	}
+
+	return nil
+}
+
+func (s *TripService) sendJoinDecisionEmailToUser(trip *models.Trip, targetUser *models.User, munimjiMember *models.TripMember, action string) {
+	appBaseURL := "https://splito-alpha.vercel.app"
+	if s.cfg.AppEnv == "development" {
+		appBaseURL = "http://localhost:5173"
+	}
+
+	var subject, badge, title, message, btnText, btnURL string
+
+	if action == "approve" {
+		subject = fmt.Sprintf("You've been added to trip \"%s\" on Splito!", trip.Name)
+		badge = "REQUEST APPROVED"
+		title = "Request Approved! Welcome aboard!"
+		message = fmt.Sprintf("Great news! Munimji has approved your request to join <strong>%s</strong>. You are now an active expedition member.", trip.Name)
+		btnText = "Enter Expedition Workspace &rarr;"
+		btnURL = fmt.Sprintf("%s/dashboard?trip=%d", appBaseURL, trip.ID)
+	} else {
+		subject = fmt.Sprintf("Update regarding your request to join \"%s\" on Splito", trip.Name)
+		badge = "REQUEST DECLINED"
+		title = "Join Request Update"
+		message = fmt.Sprintf("Munimji has reviewed your request to join <strong>%s</strong> and was unable to accept it at this time.", trip.Name)
+		btnText = "Back to Splito &rarr;"
+		btnURL = fmt.Sprintf("%s/dashboard", appBaseURL)
+	}
+
+	htmlContent := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>%s</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
+  <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%%" style="max-width:520px;background-color:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.06);">
+          <tr>
+            <td style="background-color:#0f172a;padding:28px 32px;text-align:left;">
+              <div style="display:inline-block;">
+                <span style="color:#ffffff;font-size:24px;font-weight:800;letter-spacing:-0.5px;">Splito</span>
+                <span style="color:#38bdf8;font-size:12px;margin-left:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;background:rgba(56,189,248,0.18);padding:3px 8px;border-radius:6px;">%s</span>
+              </div>
+              <p style="margin:6px 0 0 0;color:#94a3b8;font-size:12px;">Expedition Treasury Protocol</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 32px 24px 32px;">
+              <h1 style="margin:0 0 10px 0;font-size:20px;font-weight:700;color:#0f172a;">%s</h1>
+              <p style="margin:0 0 20px 0;font-size:14px;line-height:1.6;color:#475569;">
+                Hello <strong>%s</strong>, %s
+              </p>
+
+              <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;margin-bottom:24px;">
+                <tr>
+                  <td>
+                    <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Expedition Details</div>
+                    <div style="font-size:16px;font-weight:700;color:#0f172a;margin:4px 0 2px 0;">%s</div>
+                    <div style="font-size:13px;color:#475569;">Route: <strong>%s</strong> &rarr; <strong>%s</strong></div>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="margin:0 0 24px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="%s" style="display:inline-block;background-color:#2563eb;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:14px 28px;border-radius:10px;box-shadow:0 4px 12px rgba(37,99,235,0.25);">
+                      %s
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8fafc;border-top:1px solid #f1f5f9;padding:16px 32px;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#94a3b8;">
+                Splito • Group expenses, split with zero drama.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`, title, badge, title, targetUser.Name, message, trip.Name, trip.StartLocation, trip.Destination, btnURL, btnText)
+
+	DispatchEmail(s.cfg, targetUser.Email, subject, htmlContent, fmt.Sprintf("SPLITO JOIN DECISION %s", action))
 }

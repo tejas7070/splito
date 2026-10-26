@@ -18,6 +18,7 @@ const (
 	MembershipRejected MembershipStatus = "rejected"
 	MembershipLeft     MembershipStatus = "left"
 	MembershipRemoved  MembershipStatus = "removed"
+	MembershipRequested MembershipStatus = "requested"
 )
 
 type InvitationStatus string
@@ -90,6 +91,7 @@ type Trip struct {
 	Status          TripStatus       `json:"status"`
 	UserRole        Role             `json:"user_role,omitempty"`
 	UserStatus      MembershipStatus `json:"user_status,omitempty"`
+	InviteCode      string           `json:"invite_code,omitempty"`
 	CreatedAt       time.Time        `json:"created_at"`
 	UpdatedAt       time.Time        `json:"updated_at"`
 }

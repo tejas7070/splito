@@ -28,8 +28,9 @@ export interface Trip {
   created_by?: number;
   status: string;
   creator_user_id?: number;
+  invite_code?: string;
   user_role?: 'munimji' | 'co_reviewer' | 'participant';
-  user_status?: 'invited' | 'active' | 'rejected' | 'left';
+  user_status?: 'invited' | 'active' | 'rejected' | 'left' | 'requested';
 }
 
 export interface TripStop {
@@ -108,7 +109,25 @@ export interface TripMember {
   user_name: string;
   email: string;
   role: 'munimji' | 'co_reviewer' | 'participant';
-  status: 'active' | 'invited' | 'rejected' | 'left';
+  status: 'active' | 'invited' | 'rejected' | 'left' | 'requested';
+  created_at?: string;
+  joined_at?: string;
+}
+
+export interface InviteInfo {
+  trip_id: number;
+  invite_code: string;
+  title: string;
+  start_point: string;
+  destination: string;
+  start_at: string;
+  end_at: string;
+  estimated_budget: number;
+  munimji_name: string;
+  munimji_email: string;
+  member_count: number;
+  user_status: '' | 'requested' | 'active' | 'rejected';
+  is_munimji: boolean;
   joined_at: string;
 }
 
@@ -209,6 +228,14 @@ export const tripService = {
 
   updateMemberRole: (data: { trip_id: number; user_id: number; role: 'co_reviewer' | 'participant' }) =>
     api.post<{ message: string; role: string }>('/trips/members/role/update', data),
+  getInviteInfo: (code: string) =>
+    api.get<InviteInfo>('/trips/invite-info', { params: { code } }),
+  respondInviteLink: (data: { invite_code: string; action: 'request' | 'reject' }) =>
+    api.post<{ message: string; action: string }>('/trips/invite-respond', data),
+  listJoinRequests: (trip_id: number) =>
+    api.post<TripMember[]>('/trips/members/requests', { trip_id }),
+  decideJoinRequest: (data: { trip_id: number; user_id: number; action: 'approve' | 'reject' }) =>
+    api.post<{ message: string; action: string }>('/trips/members/request-decision', data),
 };
 
 export const locationService = {
