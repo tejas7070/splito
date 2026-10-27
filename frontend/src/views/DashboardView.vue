@@ -1477,6 +1477,27 @@ const userInitials = computed(() => {
   return 'U';
 });
 
+const getInitials = (name?: string, email?: string) => {
+  if (name && name.trim()) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2 && parts[0] && parts[1]) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.trim().slice(0, 2).toUpperCase();
+  }
+  if (email && email.trim()) {
+    return email.trim().slice(0, 2).toUpperCase();
+  }
+  return 'M';
+};
+
+const formatMemberDate = (dateStr?: string) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
 const profilePopover = ref();
 const toggleProfilePopover = (event: Event) => {
   if (profilePopover.value) {
@@ -3069,45 +3090,79 @@ onMounted(async () => {
 
           <!-- Section: Pending Join Requests (Munimji Only) -->
           <div class="members-sub-section pending-join-requests-section" v-if="isMunimji && joinRequestsList.length > 0">
-            <h4 class="sub-deck-title brand-font text-amber-400">
-              <i class="pi pi-clock mr-1"></i> Join Requests Pending Review ({{ joinRequestsList.length }})
-            </h4>
-            <span class="sub-deck-subtitle">People who requested to join via your shared expedition link.</span>
+            <div class="sub-section-header">
+              <div class="sub-section-title-wrap">
+                <h4 class="sub-deck-title brand-font text-amber-400">
+                  <i class="pi pi-clock mr-1"></i> Join Requests Pending Review
+                </h4>
+                <span class="sub-deck-subtitle">People who requested to join via your shared expedition link.</span>
+              </div>
+              <span class="nav-count-pill amber-pill">{{ joinRequestsList.length }}</span>
+            </div>
+
             <div class="members-grid-stack">
               <div 
                 v-for="req in joinRequestsList" 
                 :key="'join-req-' + req.id" 
                 class="member-neu-card join-request-card"
               >
-                <div class="member-info">
-                  <div class="member-header">
-                    <span class="member-name brand-font">{{ req.user_name || req.email?.split('@')[0] || 'User' }}</span>
-                    <Tag value="Requested to Join" severity="warn" icon="pi pi-clock" rounded />
+                <!-- Card Top: Avatar + Identity + Requested Badge -->
+                <div class="member-card-top">
+                  <div class="member-avatar-box">
+                    <Avatar 
+                      :label="getInitials(req.user_name, req.email)" 
+                      shape="circle" 
+                      class="member-card-avatar avatar-amber" 
+                    />
+                    <span class="avatar-status-badge amber">
+                      <i class="pi pi-clock"></i>
+                    </span>
                   </div>
-                  <span class="member-email">{{ req.email }}</span>
+                  <div class="member-header-details">
+                    <div class="member-name-row">
+                      <span class="member-name brand-font" :title="req.user_name || req.email?.split('@')[0]">{{ req.user_name || req.email?.split('@')[0] || 'User' }}</span>
+                      <span class="role-pill-badge role-requested">
+                        <i class="pi pi-clock"></i>
+                        <span>Requested</span>
+                      </span>
+                    </div>
+                    <span class="member-email" :title="req.email">{{ req.email }}</span>
+                  </div>
                 </div>
-                <div class="member-card-footer">
-                  <span class="member-join-date mono-num">
-                    {{ req.joined_at ? `Requested ${new Date(req.joined_at).toLocaleDateString()}` : 'Awaiting Approval' }}
+
+                <!-- Meta Row: Requested Date -->
+                <div class="member-card-meta">
+                  <span class="member-meta-item">
+                    <i class="pi pi-calendar"></i>
+                    <span>{{ req.joined_at ? `Requested ${formatMemberDate(req.joined_at)}` : 'Awaiting Review' }}</span>
                   </span>
-                  <div class="member-actions-row">
-                    <Button 
+                  <span class="request-pending-chip">
+                    <span class="status-dot amber-dot"></span>
+                    <span>Pending</span>
+                  </span>
+                </div>
+
+                <!-- Footer Actions: Side-by-side Approve & Decline Grid -->
+                <div class="member-card-footer">
+                  <div class="join-request-actions-grid">
+                    <button 
+                      type="button"
                       @click="handleDecideJoinRequest(req.user_id, 'approve')" 
-                      :loading="decidingRequestId === req.user_id" 
-                      label="Approve" 
-                      icon="pi pi-check" 
-                      severity="success" 
-                      size="small" 
-                    />
-                    <Button 
+                      :disabled="decidingRequestId === req.user_id" 
+                      class="btn-request-action approve"
+                    >
+                      <i :class="decidingRequestId === req.user_id ? 'pi pi-spin pi-spinner' : 'pi pi-check'"></i>
+                      <span>Approve</span>
+                    </button>
+                    <button 
+                      type="button"
                       @click="handleDecideJoinRequest(req.user_id, 'reject')" 
-                      :loading="decidingRequestId === req.user_id" 
-                      label="Decline" 
-                      icon="pi pi-times" 
-                      severity="danger" 
-                      size="small" 
-                      outlined 
-                    />
+                      :disabled="decidingRequestId === req.user_id" 
+                      class="btn-request-action decline"
+                    >
+                      <i :class="decidingRequestId === req.user_id ? 'pi pi-spin pi-spinner' : 'pi pi-times'"></i>
+                      <span>Decline</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -3116,7 +3171,16 @@ onMounted(async () => {
 
           <!-- Section 1: Active Participants -->
           <div class="members-sub-section">
-            <h4 class="sub-deck-title brand-font"><i class="pi pi-users"></i> Active Expedition Members ({{ membersList.length }})</h4>
+            <div class="sub-section-header">
+              <div class="sub-section-title-wrap">
+                <h4 class="sub-deck-title brand-font">
+                  <i class="pi pi-users mr-1"></i> Active Expedition Members
+                </h4>
+                <span class="sub-deck-subtitle">Enrolled participants who have access to the ledger and claims manifest.</span>
+              </div>
+              <span class="nav-count-pill">{{ membersList.length }}</span>
+            </div>
+
             <div v-if="membersList.length === 0" class="empty-records-msg">
               No active participants yet.
             </div>
@@ -3125,61 +3189,91 @@ onMounted(async () => {
                 v-for="member in membersList" 
                 :key="member.id"
                 class="member-neu-card"
+                :class="{ 'is-munimji-card': member.role === 'munimji', 'is-coreviewer-card': member.role === 'co_reviewer' }"
               >
-                <div class="member-info">
-                  <div class="member-header">
-                    <span class="member-name brand-font">{{ member.user_name || member.email?.split('@')[0] || 'Member' }}</span>
-                    <div class="member-badges-row">
-                      <Tag 
-                        :value="member.role === 'munimji' ? 'Munimji' : member.role === 'co_reviewer' ? 'Co-Reviewer' : 'Participant'" 
-                        :severity="member.role === 'munimji' ? 'warn' : member.role === 'co_reviewer' ? 'info' : 'secondary'"
-                        :icon="member.role === 'munimji' ? 'pi pi-crown' : member.role === 'co_reviewer' ? 'pi pi-shield' : 'pi pi-user'"
-                        rounded
-                      />
-                      <Tag value="Active" severity="success" icon="pi pi-check" rounded />
-                    </div>
+                <!-- Top Row: Avatar + Name/Email + Role Badge -->
+                <div class="member-card-top">
+                  <div class="member-avatar-box">
+                    <Avatar 
+                      :label="getInitials(member.user_name, member.email)" 
+                      shape="circle" 
+                      :class="['member-card-avatar', member.role === 'munimji' ? 'avatar-amber' : member.role === 'co_reviewer' ? 'avatar-cyan' : 'avatar-slate']" 
+                    />
+                    <span :class="['avatar-status-badge', member.role === 'munimji' ? 'amber' : member.role === 'co_reviewer' ? 'cyan' : 'emerald']">
+                      <i :class="member.role === 'munimji' ? 'pi pi-crown' : member.role === 'co_reviewer' ? 'pi pi-shield' : 'pi pi-check'"></i>
+                    </span>
                   </div>
-                  <span class="member-email">{{ member.email }}</span>
+                  <div class="member-header-details">
+                    <div class="member-name-row">
+                      <span class="member-name brand-font" :title="member.user_name || member.email?.split('@')[0]">{{ member.user_name || member.email?.split('@')[0] || 'Member' }}</span>
+                      <span :class="['role-pill-badge', 'role-' + member.role]">
+                        <i :class="member.role === 'munimji' ? 'pi pi-crown' : member.role === 'co_reviewer' ? 'pi pi-shield' : 'pi pi-user'"></i>
+                        <span>{{ member.role === 'munimji' ? 'Munimji' : member.role === 'co_reviewer' ? 'Co-Reviewer' : 'Participant' }}</span>
+                      </span>
+                    </div>
+                    <span class="member-email" :title="member.email">{{ member.email }}</span>
+                  </div>
                 </div>
 
-                <div class="member-card-footer">
-                  <span class="member-join-date mono-num">
-                    {{ member.joined_at ? `Joined ${new Date(member.joined_at).toLocaleDateString()}` : 'Active Member' }}
+                <!-- Meta Row: Joined Date (Consistent across ALL cards) -->
+                <div class="member-card-meta">
+                  <span class="member-meta-item">
+                    <i class="pi pi-calendar"></i>
+                    <span>{{ member.joined_at ? `Joined ${formatMemberDate(member.joined_at)}` : 'Active Expedition Member' }}</span>
                   </span>
+                  <span class="member-status-chip">
+                    <span class="status-dot"></span>
+                    <span>Active</span>
+                  </span>
+                </div>
 
-                  <!-- Munimji Actions: Configure Role & Remove -->
-                  <div class="member-actions-row" v-if="isMunimji && member.role !== 'munimji' && member.user_id !== authStore.user?.id">
-                    <!-- Co-Reviewer Role Configuration Toggle -->
-                    <Button 
+                <!-- Card Footer: Unified Height & Alignment for both Munimji and Participant cards -->
+                <div class="member-card-footer">
+                  <!-- Case A: Munimji / Lead -->
+                  <div v-if="member.role === 'munimji'" class="member-lead-indicator">
+                    <i class="pi pi-crown text-amber-400"></i>
+                    <span>Expedition Lead & Treasurer</span>
+                  </div>
+
+                  <!-- Case B: Viewer is Munimji, managing another member -->
+                  <div v-else-if="isMunimji && member.user_id !== authStore.user?.id" class="member-manage-actions">
+                    <button 
                       v-if="member.role === 'participant'"
+                      type="button"
                       @click="handleUpdateRole(member, 'co_reviewer')" 
-                      :loading="updatingRoleId === member.user_id"
-                      label="Make Co-Reviewer" 
-                      icon="pi pi-shield" 
-                      severity="info" 
-                      size="small" 
-                      outlined 
-                    />
-                    <Button 
+                      :disabled="updatingRoleId === member.user_id"
+                      class="btn-member-action role-promote"
+                      title="Designate as Co-Reviewer to audit Munimji claims"
+                    >
+                      <i class="pi pi-shield"></i>
+                      <span>Make Co-Reviewer</span>
+                    </button>
+                    <button 
                       v-else-if="member.role === 'co_reviewer'"
+                      type="button"
                       @click="handleUpdateRole(member, 'participant')" 
-                      :loading="updatingRoleId === member.user_id"
-                      label="Make Participant" 
-                      icon="pi pi-user" 
-                      severity="secondary" 
-                      size="small" 
-                      outlined 
-                    />
+                      :disabled="updatingRoleId === member.user_id"
+                      class="btn-member-action role-demote"
+                      title="Revert role to standard participant"
+                    >
+                      <i class="pi pi-user"></i>
+                      <span>Make Participant</span>
+                    </button>
 
-                    <!-- Remove Member -->
-                    <Button 
+                    <button 
+                      type="button"
                       @click="openRemoveMemberModal(member)" 
-                      label="Remove" 
-                      icon="pi pi-user-minus" 
-                      severity="danger" 
-                      size="small" 
-                      text 
-                    />
+                      class="btn-member-action remove-btn"
+                      title="Remove member from expedition"
+                    >
+                      <i class="pi pi-user-minus"></i>
+                      <span>Remove</span>
+                    </button>
+                  </div>
+
+                  <!-- Case C: Viewer is standard member or viewing self -->
+                  <div v-else class="member-self-indicator">
+                    <span class="self-tag">{{ member.user_id === authStore.user?.id ? 'You' : 'Expedition Member' }}</span>
                   </div>
                 </div>
               </div>
@@ -3189,7 +3283,13 @@ onMounted(async () => {
           <!-- Section 2: Invitations Manifest (Loaded from dedicated trip_invitations table) -->
           <div class="members-sub-section" style="margin-top: 32px;" v-if="invitationsList.length > 0">
             <div class="sub-section-header">
-              <h4 class="sub-deck-title brand-font"><i class="pi pi-send"></i> Invitation Manifest & Status ({{ invitationsList.length }})</h4>
+              <div class="sub-section-title-wrap">
+                <h4 class="sub-deck-title brand-font">
+                  <i class="pi pi-send mr-1"></i> Invitation Manifest & Status
+                </h4>
+                <span class="sub-deck-subtitle">Direct email invitations dispatched to colleagues.</span>
+              </div>
+              <span class="nav-count-pill">{{ invitationsList.length }}</span>
             </div>
 
             <div class="members-grid-stack">
@@ -3198,53 +3298,69 @@ onMounted(async () => {
                 :key="inv.id" 
                 class="member-neu-card invitation-item-card"
               >
-                <div class="member-info">
-                  <div class="member-header">
-                    <span class="member-name brand-font">{{ inv.invitee_email.split('@')[0] }}</span>
-                    <div class="member-badges-row">
-                      <Tag 
-                        :value="inv.role === 'munimji' ? 'Munimji' : inv.role === 'co_reviewer' ? 'Co-Reviewer' : 'Participant'" 
-                        :severity="inv.role === 'munimji' ? 'warn' : inv.role === 'co_reviewer' ? 'info' : 'secondary'"
-                        rounded
-                      />
-                      <Tag 
-                        :value="inv.status === 'pending' ? 'Pending' : inv.status === 'accepted' ? 'Accepted' : inv.status === 'rejected' ? 'Declined' : 'Expired'" 
-                        :severity="inv.status === 'pending' ? 'warn' : inv.status === 'accepted' ? 'success' : 'danger'"
-                        :icon="inv.status === 'pending' ? 'pi pi-clock' : inv.status === 'accepted' ? 'pi pi-check' : 'pi pi-times'"
-                        rounded
-                      />
-                    </div>
+                <!-- Top Row: Avatar + Name/Email + Role Badge -->
+                <div class="member-card-top">
+                  <div class="member-avatar-box">
+                    <Avatar 
+                      :label="getInitials('', inv.invitee_email)" 
+                      shape="circle" 
+                      class="member-card-avatar avatar-slate" 
+                    />
+                    <span class="avatar-status-badge cyan">
+                      <i class="pi pi-send"></i>
+                    </span>
                   </div>
-                  <span class="member-email">{{ inv.invitee_email }}</span>
+                  <div class="member-header-details">
+                    <div class="member-name-row">
+                      <span class="member-name brand-font" :title="inv.invitee_email.split('@')[0]">{{ inv.invitee_email.split('@')[0] }}</span>
+                      <span :class="['role-pill-badge', 'role-' + inv.role]">
+                        <i :class="inv.role === 'munimji' ? 'pi pi-crown' : inv.role === 'co_reviewer' ? 'pi pi-shield' : 'pi pi-user'"></i>
+                        <span>{{ inv.role === 'munimji' ? 'Munimji' : inv.role === 'co_reviewer' ? 'Co-Reviewer' : 'Participant' }}</span>
+                      </span>
+                    </div>
+                    <span class="member-email" :title="inv.invitee_email">{{ inv.invitee_email }}</span>
+                  </div>
                 </div>
 
-                <div class="member-card-footer">
-                  <span class="member-join-date mono-num">
-                    Sent {{ new Date(inv.created_at).toLocaleDateString() }}
+                <!-- Meta Row -->
+                <div class="member-card-meta">
+                  <span class="member-meta-item">
+                    <i class="pi pi-clock"></i>
+                    <span>Sent {{ formatMemberDate(inv.created_at) }}</span>
                   </span>
+                  <span :class="['status-chip', inv.status]">
+                    <span :class="['status-dot', inv.status]"></span>
+                    <span>{{ inv.status === 'pending' ? 'Pending' : inv.status === 'accepted' ? 'Accepted' : inv.status === 'rejected' ? 'Declined' : 'Expired' }}</span>
+                  </span>
+                </div>
 
-                  <!-- STRICT REQUIREMENT: Accept / Reject buttons visible ONLY to the invited person themselves, NEVER to Munimji or other members -->
+                <!-- Footer Actions -->
+                <div class="member-card-footer">
                   <div 
                     v-if="authStore.user?.email.toLowerCase() === inv.invitee_email.toLowerCase() && inv.status === 'pending'" 
-                    class="member-action-buttons"
+                    class="join-request-actions-grid"
                   >
-                    <Button 
+                    <button 
+                      type="button"
                       @click="handleRespondInvitation(selectedTrip.id, 'accept')" 
-                      :loading="respondingInvitation" 
-                      label="Accept" 
-                      icon="pi pi-check" 
-                      severity="success" 
-                      size="small" 
-                    />
-                    <Button 
+                      :disabled="respondingInvitation" 
+                      class="btn-request-action approve"
+                    >
+                      <i :class="respondingInvitation ? 'pi pi-spin pi-spinner' : 'pi pi-check'"></i>
+                      <span>Accept</span>
+                    </button>
+                    <button 
+                      type="button"
                       @click="handleRespondInvitation(selectedTrip.id, 'reject')" 
-                      :loading="respondingInvitation" 
-                      label="Decline" 
-                      icon="pi pi-times" 
-                      severity="danger" 
-                      size="small" 
-                      outlined
-                    />
+                      :disabled="respondingInvitation" 
+                      class="btn-request-action decline"
+                    >
+                      <i :class="respondingInvitation ? 'pi pi-spin pi-spinner' : 'pi pi-times'"></i>
+                      <span>Decline</span>
+                    </button>
+                  </div>
+                  <div v-else class="member-self-indicator">
+                    <span class="self-tag">{{ inv.status === 'pending' ? 'Awaiting User Response' : 'Invitation ' + inv.status }}</span>
                   </div>
                 </div>
               </div>
@@ -6086,178 +6202,489 @@ html.dark .popover-menu-btn:hover {
   background: var(--surface);
   box-shadow: var(--shadow-flat-sm);
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  padding: 18px 20px;
+  border-radius: 18px;
+  padding: 20px 22px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 14px;
+  min-height: 186px;
   min-width: 0;
   overflow: hidden;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+  position: relative;
 }
 
 .member-neu-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-flat);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
-.member-info {
+.member-neu-card
+
+.member-neu-card.join-request-card:hover {
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.08);
+}
+
+.member-neu-card.invitation-item-card {
+  border-top: 1px solid var(--border-subtle) !important;
+}
+
+.member-neu-card.is-munimji-card {
+  border-color: rgba(245, 158, 11, 0.18);
+}
+
+/* Card Top Section */
+.member-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  width: 100%;
+}
+
+.member-avatar-box {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.member-card-avatar {
+  width: 42px !important;
+  height: 42px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.member-card-avatar.avatar-amber {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #fbbf24 !important;
+  border: 1.5px solid rgba(245, 158, 11, 0.35) !important;
+}
+
+.member-card-avatar.avatar-cyan {
+  background: rgba(6, 182, 212, 0.15) !important;
+  color: #22d3ee !important;
+  border: 1.5px solid rgba(6, 182, 212, 0.35) !important;
+}
+
+.member-card-avatar.avatar-slate {
+  background: rgba(148, 163, 184, 0.12) !important;
+  color: #cbd5e1 !important;
+  border: 1.5px solid rgba(148, 163, 184, 0.28) !important;
+}
+
+.avatar-status-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 900;
+  border: 2px solid var(--surface);
+}
+
+.avatar-status-badge.amber {
+  background: #f59e0b;
+  color: #0f172a;
+}
+
+.avatar-status-badge.cyan {
+  background: #06b6d4;
+  color: #0f172a;
+}
+
+.avatar-status-badge.emerald {
+  background: #10b981;
+  color: #0f172a;
+}
+
+.member-header-details {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-width: 0;
+  gap: 3px;
 }
 
-.member-header {
+.member-name-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
 }
 
 .member-name {
   font-size: 15px;
   font-weight: 700;
   color: var(--text-main);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
   min-width: 0;
   flex: 1;
-}
-
-.member-badges-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.role-pill {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 6px;
-  box-shadow: var(--shadow-inset);
-}
-
-.role-pill.munimji {
-  color: #3b82f6;
-}
-
-.role-pill.co_reviewer {
-  color: #06b6d4;
-}
-
-.role-pill.participant {
-  color: var(--text-muted);
-}
-
-.status-pill {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 6px;
-}
-
-.status-pill.active {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
-}
-
-.status-pill.invited {
-  background: rgba(245, 158, 11, 0.15);
-  color: #d97706;
-}
-
-.status-pill.rejected {
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
-}
-
-.status-pill.status-readonly {
-  background: rgba(59, 130, 246, 0.12);
-  color: #3b82f6;
-  text-align: center;
-  padding: 6px 12px;
-  border-radius: 10px;
 }
 
 .member-email {
   font-size: 12px;
   color: var(--text-muted);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.member-card-footer {
+/* Role Pill Badges */
+.role-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.role-pill-badge.role-munimji {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.role-pill-badge.role-co_reviewer {
+  background: rgba(6, 182, 212, 0.14);
+  color: #22d3ee;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.role-pill-badge.role-participant {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.role-pill-badge.role-requested {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Meta Line */
+.member-card-meta {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin: 14px 0 12px 0;
+  font-size: 12px;
+  color: var(--text-muted);
   gap: 8px;
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 10px;
-  margin-top: auto;
-  min-height: 40px;
 }
 
-.member-join-date {
-  font-size: 11px;
+.member-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.member-meta-item i {
+  font-size: 12px;
   color: var(--text-muted);
+}
+
+.member-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #34d399;
+  flex-shrink: 0;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.status-dot.amber-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+.status-dot.accepted {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.status-dot.rejected {
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+.status-dot.pending {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.status-chip.accepted {
+  color: #34d399;
+}
+
+.status-chip.rejected {
+  color: #f87171;
+}
+
+.status-chip.pending {
+  color: #fbbf24;
+}
+
+.request-pending-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fbbf24;
+  flex-shrink: 0;
+}
+
+/* Card Footer */
+.member-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+  margin-top: auto;
+  min-height: 48px;
+}
+
+.member-lead-indicator {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.08);
+  padding: 6px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  width: 100%;
+  justify-content: center;
+}
+
+.member-self-indicator {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  justify-content: center;
+}
+
+.self-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 5px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+.member-manage-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.btn-member-action {
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.18s ease;
   white-space: nowrap;
 }
 
-.member-actions-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.member-action-buttons {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.btn-pill-accept {
+.btn-member-action.role-promote {
   flex: 1;
+  height: 34px;
+  background: rgba(6, 182, 212, 0.1);
+  color: #22d3ee;
+  border: 1px solid rgba(6, 182, 212, 0.28);
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+}
+
+.btn-member-action.role-promote:hover:not(:disabled) {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: rgba(6, 182, 212, 0.55);
+  color: #67e8f9;
+  transform: translateY(-1px);
+}
+
+.btn-member-action.role-demote {
+  flex: 1;
+  height: 34px;
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+}
+
+.btn-member-action.role-demote:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.2);
+  border-color: rgba(148, 163, 184, 0.45);
+  color: #f1f5f9;
+  transform: translateY(-1px);
+}
+
+.btn-member-action.remove-btn {
+  height: 34px;
+  padding: 0 12px;
+  background: rgba(239, 68, 68, 0.08);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.btn-member-action.remove-btn:hover {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.45);
+  transform: translateY(-1px);
+}
+
+/* Join Request Actions Grid */
+.join-request-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+
+.btn-request-action {
+  font-family: inherit;
+  height: 36px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  outline: none;
+}
+
+.btn-request-action.approve {
+  background: rgba(16, 185, 129, 0.14);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.btn-request-action.approve:hover:not(:disabled) {
   background: #10b981;
   color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  border-color: #10b981;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+  transform: translateY(-1px);
 }
 
-.btn-pill-accept:hover {
-  background: #059669;
-}
-
-.btn-pill-decline {
-  flex: 1;
-  background: transparent;
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-pill-decline:hover {
+.btn-request-action.decline {
   background: rgba(239, 68, 68, 0.08);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.btn-request-action.decline:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.45);
+  transform: translateY(-1px);
+}
+
+.btn-request-action:disabled,
+.btn-member-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.sub-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 14px;
+}
+
+.sub-section-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sub-section-title-wrap .sub-deck-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+}
+
+.nav-count-pill.amber-pill {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.35);
 }
 
 /* Modal */
@@ -9773,9 +10200,7 @@ html.dark .neu-table td {
   margin-bottom: 14px;
 }
 
-.join-request-card {
-  border-left: 3px solid #f59e0b !important;
-}
+
 
 @media (max-width: 768px) {
   .members-invite-banner {
