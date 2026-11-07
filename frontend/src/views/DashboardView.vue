@@ -112,29 +112,43 @@ const openEditTripWizard = async () => {
   try {
     const { data } = await tripService.getDetail(selectedTrip.value.id);
     const trip = data.trip;
-    const toPlace = (name: string, latitude?: number | null, longitude?: number | null): PlaceSuggestion | null => {
-      if (latitude == null || longitude == null) return null;
-      return { id: `saved-${latitude}-${longitude}`, name, latitude, longitude, nearby: false };
+    const toPlace = (name?: string, latitude?: number | null, longitude?: number | null): PlaceSuggestion | null => {
+      if (!name || !name.trim()) return null;
+      const lat = (latitude != null && !isNaN(Number(latitude)) && Number(latitude) !== 0) ? Number(latitude) : 19.0760;
+      const lng = (longitude != null && !isNaN(Number(longitude)) && Number(longitude) !== 0) ? Number(longitude) : 72.8777;
+      return { id: `saved-${lat}-${lng}-${Math.random()}`, name: name.trim(), latitude: lat, longitude: lng, nearby: false };
     };
-    const toLocalDateTime = (value: string) => {
+    const toLocalDateTime = (value?: string) => {
+      if (!value) return '';
       const date = new Date(value);
-      return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+      if (isNaN(date.getTime())) return '';
+      try {
+        return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+      } catch {
+        return '';
+      }
     };
 
     editingTripId.value = trip.id;
+    const startLoc = trip.start_point || trip.start_location || '';
+    const destLoc = trip.destination || '';
     wizardForm.value = {
       title: trip.title || trip.name || '',
-      start_point: trip.start_point || trip.start_location || '',
-      start_place: toPlace(trip.start_point || trip.start_location || '', trip.start_latitude, trip.start_longitude),
-      destination: trip.destination,
-      destination_place: toPlace(trip.destination, trip.destination_latitude, trip.destination_longitude),
-      stops: (trip.stops || []).map((stop, sIdx) => ({
-        id: `saved-stop-${stop.id || sIdx}-${++stopIdCounter}`,
-        input: stop.name,
-        place: { id: `saved-stop-${stop.id}`, name: stop.name, latitude: stop.latitude, longitude: stop.longitude, nearby: false },
-      })),
-      start_at: toLocalDateTime(trip.start_at),
-      end_at: toLocalDateTime(trip.end_at),
+      start_point: startLoc,
+      start_place: toPlace(startLoc, trip.start_latitude, trip.start_longitude),
+      destination: destLoc,
+      destination_place: toPlace(destLoc, trip.destination_latitude, trip.destination_longitude),
+      stops: (trip.stops || []).map((stop, sIdx) => {
+        const lat = (stop.latitude != null && !isNaN(Number(stop.latitude)) && Number(stop.latitude) !== 0) ? Number(stop.latitude) : 19.0760;
+        const lng = (stop.longitude != null && !isNaN(Number(stop.longitude)) && Number(stop.longitude) !== 0) ? Number(stop.longitude) : 72.8777;
+        return {
+          id: `saved-stop-${stop.id || sIdx}-${++stopIdCounter}`,
+          input: stop.name || '',
+          place: { id: `saved-stop-${stop.id || sIdx}`, name: stop.name || '', latitude: lat, longitude: lng, nearby: false },
+        };
+      }),
+      start_at: toLocalDateTime(trip.start_at || (trip as any).start_date),
+      end_at: toLocalDateTime(trip.end_at || (trip as any).end_date),
       estimated_budget: trip.estimated_budget && trip.estimated_budget > 0 ? trip.estimated_budget : null,
     };
     wizardStep.value = 1;
@@ -289,7 +303,7 @@ const formatDistanceKm = (meters: number) => {
 
 const isStep3Valid = computed(() => {
   const f = wizardForm.value;
-  return Boolean(f.estimated_budget !== null && f.estimated_budget > 0);
+  return f.estimated_budget === null || f.estimated_budget === undefined || Number(f.estimated_budget) >= 0;
 });
 
 const goToWizardStep = (step: 1 | 2 | 3) => {
@@ -1462,10 +1476,21 @@ const formatINR = (paise: number) => {
   }).format(paise / 100);
 };
 
+const cleanLocation = (loc?: string) => {
+  if (!loc) return '';
+  const parts = loc.split(',').map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return loc;
+  if (parts[0].length <= 3 && parts.length > 1) {
+    return parts[0] + ', ' + parts[1];
+  }
+  return parts[0];
+};
+
 const userInitials = computed(() => {
   if (!authStore.user) return 'U';
-  if (authStore.user.full_name && authStore.user.full_name.trim()) {
-    const parts = authStore.user.full_name.trim().split(/\s+/);
+  const displayName = authStore.user.full_name || authStore.user.name || '';
+  if (displayName && displayName.trim()) {
+    const parts = displayName.trim().split(/\s+/);
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
@@ -1516,7 +1541,7 @@ const openProfileModal = () => {
   if (profilePopover.value) {
     profilePopover.value.hide();
   }
-  profileName.value = authStore.user?.full_name || '';
+  profileName.value = authStore.user?.full_name || authStore.user?.name || '';
   profilePhone.value = (authStore.user as any)?.phone || '';
   showProfileModal.value = true;
 };
@@ -1690,14 +1715,16 @@ onMounted(async () => {
                 class="popover-avatar-lg" 
               />
               <div class="popover-info-col">
-                <span class="popover-display-name brand-font">
-                  {{ authStore.user?.full_name || authStore.user?.email?.split('@')[0] || 'User Profile' }}
-                </span>
-                <span class="popover-display-email mono-num">{{ authStore.user?.email }}</span>
-                <div class="popover-tag-row">
-                  <Tag value="Signed In" severity="success" rounded />
-                  <Tag v-if="authStore.user?.id" :value="'UID: ' + authStore.user?.id" severity="secondary" rounded />
+                <div class="popover-name-badge-row">
+                  <span class="popover-display-name brand-font">
+                    {{ authStore.user?.full_name || authStore.user?.name || authStore.user?.email?.split('@')[0] || 'User Profile' }}
+                  </span>
+                  <span class="popover-status-badge">
+                    <span class="status-dot"></span>
+                    <span>Active</span>
+                  </span>
                 </div>
+                <span class="popover-display-email mono-num">{{ authStore.user?.email }}</span>
               </div>
             </div>
 
@@ -1823,8 +1850,10 @@ onMounted(async () => {
               <span class="trip-item-name brand-font">{{ trip.title }}</span>
               <span class="trip-item-status mono-num">{{ trip.status }}</span>
             </div>
-            <div class="trip-item-route">
-              {{ trip.start_point }} → {{ trip.destination }}
+            <div class="trip-item-route" :title="(trip.start_point || '') + ' → ' + (trip.destination || '')" v-if="trip.start_point || trip.destination">
+              <span>{{ cleanLocation(trip.start_point) }}</span>
+              <i class="pi pi-arrow-right route-inline-arrow"></i>
+              <span>{{ cleanLocation(trip.destination) }}</span>
             </div>
           </div>
 
@@ -2467,7 +2496,7 @@ onMounted(async () => {
                 @click="handleWizardSubmit" 
                 :loading="creatingTripLoading"
                 :disabled="!isStep3Valid" 
-                label="Create the Trip" 
+                :label="editingTripId ? 'Save Changes' : 'Create the Trip'" 
                 icon="pi pi-check" 
                 severity="primary" 
                 size="large"
@@ -3475,7 +3504,8 @@ onMounted(async () => {
           <!-- SECTION 3: Member Balance Ledger Breakdown -->
           <div class="settlement-section-block">
             <h4 class="sub-deck-title brand-font"><i class="pi pi-chart-pie"></i> Participant Net Balance Manifest</h4>
-            <div v-if="settlementData" class="record-table-wrapper">
+            <!-- Desktop Participant Manifest Table -->
+            <div v-if="settlementData" class="record-table-wrapper settlement-manifest-desktop-table">
               <table class="neu-table">
                 <thead>
                   <tr>
@@ -3488,39 +3518,102 @@ onMounted(async () => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="b in settlementData.balances" :key="b.user_id">
-                    <td class="font-bold brand-font">
-                      {{ b.user_name }}
-                      <span class="sub-email">({{ b.email }})</span>
-                    </td>
-                    <td class="mono-num text-right">{{ formatINR(Math.round(b.contributed * 100)) }}</td>
-                    <td class="mono-num text-right">{{ formatINR(Math.round(b.claimed * 100)) }}</td>
-                    <td class="mono-num text-right font-bold">{{ formatINR(Math.round(b.total_paid * 100)) }}</td>
-                    <td class="mono-num text-right text-muted">{{ formatINR(Math.round(b.equal_share * 100)) }}</td>
-                    <td :class="['mono-num text-right font-bold', b.net_balance >= 0 ? 'amount-inflow' : 'amount-outflow']">
-                      <div class="net-position-cluster">
-                        <span>{{ b.net_balance >= 0 ? '+ To Receive ' : '- Owes ' }}{{ formatINR(Math.abs(b.net_balance_paise)) }}</span>
-                        <div class="net-pills-row" v-if="b.net_balance >= 0">
-                          <span v-if="b.claim_payout && b.claim_payout > 0" class="sub-breakdown-pill claim-pill">
-                            Claims: {{ formatINR(Math.round(b.claim_payout * 100)) }}
-                          </span>
-                          <span v-if="b.pool_refund && b.pool_refund > 0" class="sub-breakdown-pill refund-pill">
-                            Refund: {{ formatINR(Math.round(b.pool_refund * 100)) }}
-                          </span>
-                          <span v-if="(b.net_balance - (b.claim_payout || 0) - (b.pool_refund || 0)) > 0.01" class="sub-breakdown-pill dues-pill">
-                            Peer Dues: {{ formatINR(Math.round((b.net_balance - (b.claim_payout || 0) - (b.pool_refund || 0)) * 100)) }}
-                          </span>
+                  <tr v-for="b in settlementData.balances" :key="b.user_id" class="settlement-manifest-row">
+                    <td>
+                      <div class="participant-cell">
+                        <Avatar 
+                          :label="(b.user_name || b.email || 'U').slice(0, 2).toUpperCase()" 
+                          shape="circle" 
+                          class="participant-avatar"
+                        />
+                        <div class="participant-meta">
+                          <span class="participant-name brand-font">{{ b.user_name }}</span>
+                          <span class="participant-email mono-num">{{ b.email }}</span>
                         </div>
-                        <div class="net-pills-row" v-else>
-                          <span class="sub-breakdown-pill owes-pill">
-                            Unpaid Fair Share of Trip Cost
-                          </span>
+                      </div>
+                    </td>
+                    <td class="mono-num text-right font-semibold">{{ formatINR(Math.round(b.contributed * 100)) }}</td>
+                    <td class="mono-num text-right font-semibold">{{ formatINR(Math.round(b.claimed * 100)) }}</td>
+                    <td class="mono-num text-right font-bold text-[var(--text-main)]">{{ formatINR(Math.round(b.total_paid * 100)) }}</td>
+                    <td class="mono-num text-right text-muted">{{ formatINR(Math.round(b.equal_share * 100)) }}</td>
+                    <td class="text-right net-position-td">
+                      <div class="net-position-cluster">
+                        <div :class="['net-amount-badge', b.net_balance >= 0 ? 'badge-receive' : 'badge-owes']">
+                          <i :class="b.net_balance >= 0 ? 'pi pi-arrow-down-left' : 'pi pi-arrow-up-right'"></i>
+                          <span class="badge-label">{{ b.net_balance >= 0 ? 'To Receive' : 'Owes' }}</span>
+                          <span class="badge-sum mono-num font-bold">{{ formatINR(Math.abs(b.net_balance_paise)) }}</span>
+                        </div>
+                        <div class="net-meta-line" v-if="b.net_balance >= 0 && ((b.claim_payout && b.claim_payout > 0) || (b.pool_refund && b.pool_refund > 0) || (b.net_balance - (b.claim_payout || 0) - (b.pool_refund || 0)) > 0.01)">
+                          <span v-if="b.claim_payout && b.claim_payout > 0">Claims {{ formatINR(Math.round(b.claim_payout * 100)) }}</span>
+                          <span v-if="b.claim_payout && b.pool_refund" class="meta-dot">·</span>
+                          <span v-if="b.pool_refund && b.pool_refund > 0">Refund {{ formatINR(Math.round(b.pool_refund * 100)) }}</span>
+                          <span v-if="(b.claim_payout || b.pool_refund) && (b.net_balance - (b.claim_payout || 0) - (b.pool_refund || 0)) > 0.01" class="meta-dot">·</span>
+                          <span v-if="(b.net_balance - (b.claim_payout || 0) - (b.pool_refund || 0)) > 0.01">Peer Dues {{ formatINR(Math.round((b.net_balance - (b.claim_payout || 0) - (b.pool_refund || 0)) * 100)) }}</span>
+                        </div>
+                        <div class="net-meta-line text-muted" v-else-if="b.net_balance < 0">
+                          <span>Unpaid Fair Share</span>
                         </div>
                       </div>
                     </td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <!-- Mobile Participant Manifest Cards -->
+            <div v-if="settlementData" class="settlement-manifest-mobile-cards">
+              <div v-for="b in settlementData.balances" :key="'mob-' + b.user_id" class="manifest-mobile-card">
+                <div class="manifest-mobile-card-top">
+                  <div class="participant-cell">
+                    <Avatar 
+                      :label="(b.user_name || b.email || 'U').slice(0, 2).toUpperCase()" 
+                      shape="circle" 
+                      class="participant-avatar"
+                    />
+                    <div class="participant-meta">
+                      <span class="participant-name brand-font">{{ b.user_name }}</span>
+                      <span class="participant-email mono-num">{{ b.email }}</span>
+                    </div>
+                  </div>
+                  <div :class="['net-amount-badge', b.net_balance >= 0 ? 'badge-receive' : 'badge-owes']">
+                    <i :class="b.net_balance >= 0 ? 'pi pi-arrow-down-left' : 'pi pi-arrow-up-right'"></i>
+                    <span class="badge-label">{{ b.net_balance >= 0 ? 'To Receive' : 'Owes' }}</span>
+                    <span class="badge-sum mono-num">{{ formatINR(Math.abs(b.net_balance_paise)) }}</span>
+                  </div>
+                </div>
+
+                <div class="manifest-mobile-metrics-grid">
+                  <div class="manifest-metric-box">
+                    <span class="manifest-metric-label">Contributions</span>
+                    <span class="manifest-metric-value mono-num font-semibold">{{ formatINR(Math.round(b.contributed * 100)) }}</span>
+                  </div>
+                  <div class="manifest-metric-box">
+                    <span class="manifest-metric-label">Personal Claims</span>
+                    <span class="manifest-metric-value mono-num font-semibold">{{ formatINR(Math.round(b.claimed * 100)) }}</span>
+                  </div>
+                  <div class="manifest-metric-box">
+                    <span class="manifest-metric-label">Total Paid</span>
+                    <span class="manifest-metric-value mono-num font-bold text-[var(--text-main)]">{{ formatINR(Math.round(b.total_paid * 100)) }}</span>
+                  </div>
+                  <div class="manifest-metric-box">
+                    <span class="manifest-metric-label">Fair Share</span>
+                    <span class="manifest-metric-value mono-num text-muted">{{ formatINR(Math.round(b.equal_share * 100)) }}</span>
+                  </div>
+                </div>
+
+                <div class="manifest-mobile-card-footer" v-if="((b.claim_payout && b.claim_payout > 0) || (b.pool_refund && b.pool_refund > 0) || (b.net_balance - (b.claim_payout || 0) - (b.pool_refund || 0)) > 0.01 || b.net_balance < 0)">
+                  <div class="net-meta-line" v-if="b.net_balance >= 0">
+                    <span v-if="b.claim_payout && b.claim_payout > 0">Claims {{ formatINR(Math.round(b.claim_payout * 100)) }}</span>
+                    <span v-if="b.claim_payout && b.pool_refund" class="meta-dot">·</span>
+                    <span v-if="b.pool_refund && b.pool_refund > 0">Refund {{ formatINR(Math.round(b.pool_refund * 100)) }}</span>
+                    <span v-if="(b.claim_payout || b.pool_refund) && (b.net_balance - (b.claim_payout || 0) - (b.pool_refund || 0)) > 0.01" class="meta-dot">·</span>
+                    <span v-if="(b.net_balance - (b.claim_payout || 0) - (b.pool_refund || 0)) > 0.01">Peer Dues {{ formatINR(Math.round((b.net_balance - (b.claim_payout || 0) - (b.pool_refund || 0)) * 100)) }}</span>
+                  </div>
+                  <div class="net-meta-line text-muted" v-else>
+                    <span>Unpaid Fair Share</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           </div>
@@ -4366,28 +4459,38 @@ onMounted(async () => {
 
 /* Popover Profile Panel */
 .popover-profile-card {
-  width: 270px;
-  padding: 2px;
+  width: 290px;
+  padding: 4px;
 }
 
 .popover-header-row {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
+  gap: 14px;
+  align-items: center;
+  padding: 4px 6px 6px 6px;
 }
 
 .popover-avatar-lg {
   background: var(--accent) !important;
   color: #ffffff !important;
-  font-weight: 700;
+  font-weight: 800;
+  box-shadow: var(--shadow-flat-sm);
+  flex-shrink: 0;
 }
 
 .popover-info-col {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   flex: 1;
-  overflow: hidden;
+  min-width: 0;
+}
+
+.popover-name-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .popover-display-name {
@@ -4397,28 +4500,51 @@ onMounted(async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.popover-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
 }
 
 .popover-display-email {
   font-size: 12px;
   color: var(--text-muted);
-  word-break: break-all;
-}
-
-.popover-tag-row {
-  display: flex;
-  gap: 6px;
-  margin-top: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
 }
 
 .popover-sep {
   margin: 10px 0 !important;
+  opacity: 0.6;
 }
 
 .popover-menu-stack {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .popover-menu-btn {
@@ -4427,31 +4553,51 @@ onMounted(async () => {
   gap: 10px;
   width: 100%;
   padding: 9px 12px;
-  border-radius: 8px;
-  border: none;
+  border-radius: 10px;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text-main);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: all 0.15s ease;
   text-align: left;
 }
 
+.popover-menu-btn i {
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
 .popover-menu-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--surface);
+  box-shadow: var(--shadow-flat-sm);
+  border-color: var(--border, rgba(125, 133, 146, 0.15));
+  color: var(--text-main);
+}
+
+.popover-menu-btn:hover i {
+  color: var(--accent, #06b6d4);
 }
 
 html.dark .popover-menu-btn:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--surface);
+  box-shadow: var(--shadow-flat-sm);
 }
 
 .popover-menu-btn.text-danger {
   color: #ef4444;
 }
 
+.popover-menu-btn.text-danger i {
+  color: #ef4444;
+}
+
 .popover-menu-btn.text-danger:hover {
-  background: rgba(239, 68, 68, 0.08);
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
 }
 
 /* Empty Workspace State */
@@ -4541,6 +4687,7 @@ html.dark .popover-menu-btn:hover {
   gap: 24px;
   width: 100%;
   margin: 0;
+  align-items: flex-start;
 }
 
 /* Center & Right: Ledger Column Main Content */
@@ -4561,10 +4708,25 @@ html.dark .popover-menu-btn:hover {
   box-shadow: var(--shadow-flat);
   border-radius: 20px;
   padding: 20px;
+  position: sticky;
+  top: 88px;
+  align-self: flex-start;
   height: fit-content;
-  max-height: calc(100vh - 120px);
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border, rgba(125, 133, 146, 0.25)) transparent;
   display: flex;
   flex-direction: column;
+}
+
+.sidebar-column::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-column::-webkit-scrollbar-thumb {
+  background: var(--border, rgba(125, 133, 146, 0.25));
+  border-radius: 4px;
 }
 
 .sidebar-top {
@@ -4727,7 +4889,7 @@ html.dark .popover-menu-btn:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 
 .trip-item-name {
@@ -4742,9 +4904,32 @@ html.dark .popover-menu-btn:hover {
   color: var(--text-muted);
 }
 
+.trip-item-row {
+  margin-bottom: 4px;
+}
+
 .trip-item-route {
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trip-item-route span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 105px;
+}
+
+.route-inline-arrow {
+  font-size: 9px;
+  opacity: 0.6;
+  flex-shrink: 0;
 }
 
 /* ==========================================================================
@@ -5631,15 +5816,6 @@ html.dark .popover-menu-btn:hover {
   min-width: 0;
 }
 
-.route-node {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: inline-block;
-  vertical-align: middle;
-}
-
 .hero-badge {
   font-size: 10px;
   font-weight: 700;
@@ -5648,7 +5824,7 @@ html.dark .popover-menu-btn:hover {
 }
 
 .hero-title {
-  margin: 4px 0 10px 0;
+  margin: 4px 0 12px 0;
   font-size: 26px;
   font-weight: 700;
 }
@@ -5656,17 +5832,30 @@ html.dark .popover-menu-btn:hover {
 .hero-route-line {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-size: 13px;
   color: var(--text-muted);
+  flex-wrap: wrap;
+  margin-top: 10px;
+  margin-bottom: 8px;
 }
 
 .route-node {
   box-shadow: var(--shadow-inset);
-  padding: 3px 10px;
-  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  padding: 6px 16px;
+  border-radius: 10px;
   font-weight: 600;
+  font-size: 13px;
+  line-height: 1.4;
   color: var(--text-main);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 
 .route-sep {
@@ -7237,46 +7426,221 @@ html.dark .neu-table td {
   gap: 6px;
 }
 
+/* Participant Manifest Enhanced Styling */
+.settlement-manifest-row {
+  transition: background-color 0.15s ease;
+}
+
+.settlement-manifest-row:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+html.dark .settlement-manifest-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.participant-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.participant-avatar {
+  background: var(--surface) !important;
+  color: var(--accent, #06b6d4) !important;
+  border: 1px solid var(--border, rgba(125, 133, 146, 0.2));
+  font-weight: 700;
+  font-size: 11px;
+  width: 32px !important;
+  height: 32px !important;
+  box-shadow: var(--shadow-flat-sm);
+  flex-shrink: 0;
+}
+
+.participant-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.participant-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
+.participant-email {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.net-position-td {
+  vertical-align: middle;
+  padding: 10px 18px !important;
+}
+
 .net-position-cluster {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: 5px;
 }
 
-.net-pills-row {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.sub-breakdown-pill {
-  font-size: 10px;
+.net-amount-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
   font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 6px;
   white-space: nowrap;
+  box-shadow: var(--shadow-flat-sm);
 }
 
-.claim-pill {
-  background: rgba(59, 130, 246, 0.12);
-  color: #3b82f6;
+.net-amount-badge i {
+  font-size: 11px;
 }
 
-.refund-pill {
+.net-amount-badge.badge-receive {
   background: rgba(16, 185, 129, 0.12);
   color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
-.dues-pill {
-  background: rgba(6, 182, 212, 0.12);
-  color: #06b6d4;
-}
-
-.owes-pill {
+.net-amount-badge.badge-owes {
   background: rgba(239, 68, 68, 0.12);
   color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.badge-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.badge-sum {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.net-meta-line {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-top: 2px;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.meta-dot {
+  opacity: 0.45;
+  font-size: 10px;
+}
+
+/* Participant Manifest Responsive Deck */
+.settlement-manifest-desktop-table {
+  display: block;
+}
+
+.settlement-manifest-mobile-cards {
+  display: none;
+}
+
+.manifest-mobile-card {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow-flat);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.manifest-mobile-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.manifest-mobile-card-top .participant-cell {
+  flex: 1;
+  min-width: 0;
+}
+
+.manifest-mobile-card-top .participant-meta {
+  min-width: 0;
+}
+
+.manifest-mobile-card-top .participant-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  font-size: 14px;
+}
+
+.manifest-mobile-card-top .participant-email {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  font-size: 11px;
+}
+
+.manifest-mobile-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  background: var(--bg);
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+}
+
+.manifest-metric-box {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.manifest-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.manifest-metric-value {
+  font-size: 13.5px;
+  color: var(--text-main);
+}
+
+.manifest-mobile-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px dashed var(--border-subtle);
+  padding-top: 10px;
+}
+
+.manifest-mobile-card-footer .net-meta-line {
+  justify-content: flex-start;
+  width: 100%;
 }
 
 /* Status Controller & Actions Cluster */
@@ -8222,6 +8586,17 @@ html.dark .neu-table td {
 
   .record-table-wrapper {
     margin: 0 -4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .settlement-manifest-desktop-table {
+    display: none !important;
+  }
+
+  .settlement-manifest-mobile-cards {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
   }
 
   .neu-table th,

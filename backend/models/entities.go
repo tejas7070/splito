@@ -62,6 +62,7 @@ const (
 type User struct {
 	ID           int64     `json:"id"`
 	Name         string    `json:"name"`
+	FullName     string    `json:"full_name"` // alias for frontend compatibility
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"-"`
 	Phone        *string   `json:"phone,omitempty"`

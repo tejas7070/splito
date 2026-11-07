@@ -31,6 +31,7 @@ func (l *UserLoader) GetByID(ctx context.Context, id int64) (*models.User, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
+	user.FullName = user.Name
 	return user, nil
 }
 
@@ -46,6 +47,7 @@ func (l *UserLoader) GetByEmail(ctx context.Context, email string) (*models.User
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
+	user.FullName = user.Name
 	return user, nil
 }
 

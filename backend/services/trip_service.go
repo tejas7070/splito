@@ -168,7 +168,8 @@ func (s *TripService) UpdateTrip(ctx context.Context, userID int64, req *types.U
 	if trip == nil {
 		return nil, errors.New("trip not found")
 	}
-	if membership == nil || membership.Status != models.MembershipActive || membership.Role != models.RoleMunimji {
+	isMunimji := (membership != nil && membership.Status == models.MembershipActive && membership.Role == models.RoleMunimji) || trip.CreatedBy == userID
+	if !isMunimji {
 		return nil, errors.New("only an active Munimji can edit a trip")
 	}
 	if trip.Status != models.TripStatusPlanned && trip.Status != models.TripStatusActive {
@@ -201,9 +202,16 @@ func (s *TripService) UpdateTrip(ctx context.Context, userID int64, req *types.U
 	trip.EstimatedBudget = req.EstimatedBudget
 	trip.Stops = make([]models.TripStop, len(req.Stops))
 	for i, stop := range req.Stops {
+		var lat, lng float64
+		if stop.Latitude != nil {
+			lat = *stop.Latitude
+		}
+		if stop.Longitude != nil {
+			lng = *stop.Longitude
+		}
 		trip.Stops[i] = models.TripStop{
 			TripID: req.TripID, Position: i, Name: stop.Name,
-			Latitude: *stop.Latitude, Longitude: *stop.Longitude,
+			Latitude: lat, Longitude: lng,
 		}
 	}
 

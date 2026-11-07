@@ -9,8 +9,17 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = () => !!user.value;
 
+  const normalizeUser = (u: any): User => {
+    if (!u) return u;
+    return {
+      ...u,
+      name: u.name || u.full_name || '',
+      full_name: u.full_name || u.name || '',
+    };
+  };
+
   const setAuth = (accessToken: string, userData: User) => {
-    user.value = userData;
+    user.value = normalizeUser(userData);
     if (accessToken) {
       localStorage.setItem('auth_token', accessToken);
     }
@@ -56,7 +65,7 @@ export const useAuthStore = defineStore('auth', () => {
   const fetchUser = async () => {
     try {
       const res = await authService.getMe();
-      user.value = res.data;
+      user.value = normalizeUser(res.data);
       isAuthChecked.value = true;
       return res.data;
     } catch (e) {
@@ -68,8 +77,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   const updateProfile = async (data: { name: string; phone?: string }) => {
     const res = await authService.updateProfile(data);
-    user.value = res.data;
-    return res.data;
+    user.value = normalizeUser(res.data);
+    return user.value;
   };
 
   const requestPasswordOTP = async () => {
